@@ -65,3 +65,4 @@ build/
 # Note: seed.sql contains default admin credentials - ensure it's not deployed
 # db/seed.sql - uncomment if you want to exclude from version control
 
+.env*
