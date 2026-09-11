@@ -35,6 +35,28 @@ export default defineConfig(({ mode }) => {
             chunkFileNames: isDev ? '[name]-[hash].js' : 'assets/[hash].js',
             entryFileNames: isDev ? '[name]-[hash].js' : 'assets/[hash].js',
             assetFileNames: isDev ? '[name]-[hash].[ext]' : 'assets/[hash].[ext]',
+            manualChunks(id) {
+              if (id.includes('node_modules')) {
+                if (id.includes('three') || id.includes('@react-three')) {
+                  return 'vendor-three';
+                }
+                if (id.includes('react-router') || id.includes('react-dom') || id.includes('react/')) {
+                  return 'vendor-react';
+                }
+                if (id.includes('framer-motion') || id.includes('lenis')) {
+                  return 'vendor-motion';
+                }
+                if (id.includes('lucide-react')) {
+                  return 'vendor-icons';
+                }
+                if (id.includes('xlsx')) {
+                  return 'vendor-xlsx';
+                }
+                if (id.includes('@supabase') || id.includes('bcryptjs')) {
+                  return 'vendor-supabase';
+                }
+              }
+            }
           }
         }
       },

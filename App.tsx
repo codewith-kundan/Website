@@ -8,14 +8,16 @@ import { motion, useScroll, useTransform, AnimatePresence, useInView, useSpring 
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import { HeroScene, HangarScene, CombatJetScene } from './components/QuantumScene';
 import { QuadRotorStatus, SubsystemPipeline, PropulsionMetrics, RocketTrajectory, AeroFlow } from './components/Diagrams';
-import JoinCorpsPage from './pages/JoinCorps';
-import RegisterPage from './pages/Register';
-import InductionLoginPage from './pages/InductionLogin';
 import { ArrowDown, Menu, X, Target, Rocket, Plane, Instagram, Linkedin, Phone, Palette, Briefcase, Calendar, MapPin, Trophy, Hexagon, Crown, Star, Scroll, Globe, Battery, Signal, Zap, Wind, Gauge, Activity, ArrowRight, Music, Music2, User, Eye, Users as UsersIcon, Clock, CheckCircle, Shield, Lock } from 'lucide-react';
 import Lenis from 'lenis';
 import { getAllRegistrationCounts, getCouncilMembers, type Member } from './utils/supabase';
 import './types'; // Import global types
-import TeamLoginPage from './pages/TeamLogin';
+
+// Lazy-loaded routes for optimized bundle size & fast initial page loads
+const JoinCorpsPage = React.lazy(() => import('./pages/JoinCorps'));
+const RegisterPage = React.lazy(() => import('./pages/Register'));
+const InductionLoginPage = React.lazy(() => import('./pages/InductionLogin'));
+const TeamLoginPage = React.lazy(() => import('./pages/TeamLogin'));
 
 // --- AUDIO SYSTEM ---
 interface AudioContextType {
@@ -2501,16 +2503,29 @@ const MainContent = () => {
     );
 };
 
+const RouteLoadingFallback = () => (
+    <div className="min-h-screen bg-nation-void flex items-center justify-center relative overflow-hidden">
+        <div className="text-center relative z-10">
+            <div className="w-10 h-10 mx-auto mb-4 border-2 border-nation-secondary/20 border-t-nation-secondary rounded-full animate-spin" />
+            <p className="text-[10px] font-mono text-nation-text/70 uppercase tracking-[0.3em] animate-pulse">
+                INITIALIZING SUBSYSTEM...
+            </p>
+        </div>
+    </div>
+);
+
 const App = () => (
     <AudioProvider>
-        <Routes>
-            <Route path="/" element={<MainContent />} />
-            <Route path="/join-corps" element={<JoinCorpsPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route path="/team-login" element={<TeamLoginPage />} />
-            <Route path="/induction-portal" element={<TeamLoginPage />} />
-            <Route path="/induction-login" element={<InductionLoginPage />} />
-        </Routes>
+        <React.Suspense fallback={<RouteLoadingFallback />}>
+            <Routes>
+                <Route path="/" element={<MainContent />} />
+                <Route path="/join-corps" element={<JoinCorpsPage />} />
+                <Route path="/register" element={<RegisterPage />} />
+                <Route path="/team-login" element={<TeamLoginPage />} />
+                <Route path="/induction-portal" element={<TeamLoginPage />} />
+                <Route path="/induction-login" element={<InductionLoginPage />} />
+            </Routes>
+        </React.Suspense>
     </AudioProvider>
 );
 

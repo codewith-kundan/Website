@@ -26,8 +26,8 @@
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
-    "@types/react": "^19.2.7",
-    "@types/react-dom": "^19.2.3",
+    "@types/react": "~18.2.79",
+    "@types/react-dom": "~18.2.25",
     "@types/three": "^0.181.0",
     "@vitejs/plugin-react": "^5.0.0",
     "baseline-browser-mapping": "^2.9.18",
