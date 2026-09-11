@@ -1909,7 +1909,7 @@ const MainContent = () => {
                             transition={{ duration: 0.6, delay: 0.2 }}
                             className="text-nation-text font-mono text-[10px] sm:text-xs md:text-sm lg:text-lg uppercase tracking-[0.15em] sm:tracking-[0.2em] max-w-5xl mx-auto mb-8 sm:mb-12 leading-relaxed px-4"
                         >
-                            Aeromodelling Club of NIT Rourkela <br />
+                            The Official Aeromodelling and Robotics Club of NIT Rourkela <br />
                             <span className="text-nation-secondary font-bold mt-2 sm:mt-3 block md:inline md:mt-0 text-glow text-xs sm:text-sm md:text-xl">Design. Build. Fly.</span>
                         </motion.p>
 
@@ -2047,7 +2047,7 @@ const MainContent = () => {
                             >
                                 <SectionTitle subtitle="Manifesto">Mission Brief</SectionTitle>
                                 <p className="text-base leading-relaxed text-nation-text mb-6 font-light">
-                                    Udaan is the premier aeromodelling club of <strong className="text-white">NIT Rourkela</strong>. We bridge the gap between theoretical aerodynamics and practical engineering through rigorous design cycles.
+                                    Udaan is the official aeromodelling and robotics club of <strong className="text-white">NIT Rourkela</strong>. We bridge the gap between theoretical aerodynamics and practical engineering through rigorous design cycles.
                                     <br /><br />
                                     Our vision is to empower students with hands-on experience in aerospace technologies, fostering a community of innovators who are ready to tackle the challenges of modern aviation and autonomous systems.
                                 </p>

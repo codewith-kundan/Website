@@ -3049,7 +3049,7 @@ const IDCardTab = ({ member }: { member: Member }) => {
                 </div>
 
                 <div className="bg-gradient-to-r from-gray-800 via-gray-700 to-gray-800 px-8 py-4 flex items-center justify-between">
-                    <p className="text-[10px] text-white/40 uppercase tracking-[0.2em]">Aeromodelling Club</p>
+                    <p className="text-[10px] text-white/40 uppercase tracking-[0.2em]">Aeromodelling & Robotics Club</p>
                     <div className="flex gap-1">
                         {[...Array(25)].map((_, i) => (
                             <div key={i} className={`w-0.5 ${i % 3 === 0 ? 'h-5' : 'h-3'} bg-white/20`}></div>
