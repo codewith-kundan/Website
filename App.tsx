@@ -760,14 +760,14 @@ const CouncilSection = () => {
     // Updated council members with high-res photos
     const councilData = {
         president: { name: 'Dipanshu Singh', role: 'President', photoUrl: '/council/dipanshu-singh.jpg' },
-        vicePresident: { name: 'Ankit K Behera', role: 'Vice President', photoUrl: '/council/ankit-behera.jpg' },
-        secretary: { name: 'Suman Pani', role: 'Secretary', photoUrl: '/council/suman-pani.jpg' },
+        vicePresident: { name: 'Ankit Kumar Behera', role: 'Vice President', photoUrl: '/council/ankit-behera.jpg' },
+        secretary: { name: 'Suman Kumar Pani', role: 'Secretary', photoUrl: '/council/suman-pani.jpg' },
         treasurer: { name: 'Paawan Jain', role: 'Treasurer', photoUrl: '/council/paawan-jain.png' },
         droneLead: { name: 'Ayusman Behera', role: 'Drone Lead', photoUrl: '/council/ayusman-behera.jpg' },
-        rocketLead: { name: 'Subham S Sahoo', role: 'Rocket Lead', photoUrl: '/council/subham-sahoo.jpg' },
+        rocketLead: { name: 'Shubham Shekhar Sahoo', role: 'Rocket Lead', photoUrl: '/council/subham-sahoo.jpg' },
         rcLead: { name: 'Mithun Bharath', role: 'RC Lead', photoUrl: '/council/mithun-bharath.jpg' },
-        managementLead: { name: 'Rahul Kumar', role: 'Management Lead', photoUrl: '/council/rahul-kumar.jpg' },
-        prCreativeHead: { name: 'Dilesh D Patra', role: 'PR & Creative Head', photoUrl: '/council/dilesh-patra.jpg' },
+        managementLead: { name: 'Rahul Kumhar', role: 'Management Lead', photoUrl: '/council/rahul-kumar.jpg' },
+        prCreativeHead: { name: 'Dilesh Dibyaranjan Patra', role: 'PR & Creative Head', photoUrl: '/council/dilesh-patra.jpg' },
     };
 
     return (

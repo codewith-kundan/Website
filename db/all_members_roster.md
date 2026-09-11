@@ -59,13 +59,13 @@
 | **UDAAN-2012** | Supratik Roy | Member | RC Plane, Creative/Web-Dev | 3 | 3 | `approved` |
 | **UDAAN-2013** | Aleena Sheikh | Member | Rocketry | 3 | 3 | `approved` |
 | **UDAAN-2014** | Tirthankar Mishra | Member | Drone | 3 | 3 | `approved` |
-| **UDAAN-2015** | Suman Pani | Secretary | RC Plane | 3 | 5 | `approved` |
+| **UDAAN-2015** | Suman Kumar Pani | Secretary | RC Plane | 3 | 5 | `approved` |
 | **UDAAN-2016** | Hrishikesh Acharyya | Member | Rocketry | 3 | 3 | `approved` |
-| **UDAAN-2017** | Rahul Kumar | Management Lead | RC Plane | 3 | 5 | `approved` |
-| **UDAAN-2019** | Dilesh D Patra | PR & Creative Head | RC Plane | 3 | 5 | `approved` |
+| **UDAAN-2017** | Rahul Kumhar | Management Lead | RC Plane | 3 | 5 | `approved` |
+| **UDAAN-2019** | Dilesh Dibyaranjan Patra | PR & Creative Head | RC Plane | 3 | 5 | `approved` |
 | **UDAAN-2020** | Aakash Khullar | Member | Creative/Web-Dev | 3 | 3 | `approved` |
-| **UDAAN-2021** | Ankit K Behera | Vice President | Rocketry | 3 | 5 | `approved` |
-| **UDAAN-2022** | Shubham S Sahoo | Rocket Lead | Rocketry | 3 | 5 | `approved` |
+| **UDAAN-2021** | Ankit Kumar Behera | Vice President | Rocketry | 3 | 5 | `approved` |
+| **UDAAN-2022** | Shubham Shekhar Sahoo | Rocket Lead | Rocketry | 3 | 5 | `approved` |
 | **UDAAN-2023** | Shubham Kumar Pati | Member | Drone | 3 | 3 | `approved` |
 | **UDAAN-3001** | Nilesh Kumar | Senior Member | Rocketry, Creative/Web-Dev | 4 | 4 | `approved` |
 | **UDAAN-3002** | Ritik Pandey | Senior Member | Rocketry | 4 | 4 | `approved` |
