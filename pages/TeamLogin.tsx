@@ -8714,6 +8714,184 @@ const MemberDashboard = ({ member, onLogout }: { member: Member; onLogout: () =>
     );
 };
 
+// Force Password Change Screen on First Login
+const ForcePasswordChangeScreen: React.FC<{
+    member: Member;
+    onPasswordUpdated: (updatedMember: Member) => void;
+    onLogout: () => void;
+}> = ({ member, onPasswordUpdated, onLogout }) => {
+    const [currentPassword, setCurrentPassword] = useState('Udaan@2026');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [error, setError] = useState('');
+    const [success, setSuccess] = useState('');
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+        setSuccess('');
+
+        if (!currentPassword) {
+            setError('Please enter your current temporary password');
+            return;
+        }
+
+        if (newPassword.length < 6) {
+            setError('New password must be at least 6 characters long');
+            return;
+        }
+
+        if (newPassword === 'Udaan@2026') {
+            setError('Please choose a different password from the temporary default');
+            return;
+        }
+
+        if (newPassword !== confirmPassword) {
+            setError('New passwords do not match');
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            const res = await changeMemberPassword(member.member_id, currentPassword, newPassword);
+            if (res.success) {
+                setSuccess('Password updated successfully! Entering flight deck...');
+                setTimeout(() => {
+                    const updated = { ...member, requires_password_change: false };
+                    onPasswordUpdated(updated);
+                }, 1000);
+            } else {
+                setError(res.message || 'Failed to update password. Please check your current password.');
+            }
+        } catch (err) {
+            setError('An error occurred while updating your password.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    return (
+        <div className="min-h-screen bg-nation-void flex items-center justify-center p-4 relative overflow-hidden">
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-900/20 via-transparent to-transparent pointer-events-none" />
+
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                className="w-full max-w-md bg-nation-panel/80 border border-white/10 rounded-2xl p-6 sm:p-8 backdrop-blur-xl relative shadow-[0_20px_60px_rgba(0,0,0,0.8)]"
+            >
+                <div className="flex items-center justify-center w-14 h-14 mx-auto mb-4 rounded-full bg-nation-secondary/20 border border-nation-secondary/40 text-nation-secondary">
+                    <Shield size={28} />
+                </div>
+
+                <div className="text-center mb-6">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-mono uppercase tracking-widest mb-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                        First-Time Login Security Setup
+                    </div>
+                    <h2 className="text-xl sm:text-2xl font-display font-bold text-white uppercase tracking-wider">
+                        Set New Password
+                    </h2>
+                    <p className="text-nation-text text-xs mt-1.5 font-mono">
+                        Welcome, <span className="text-white font-bold">{member.name}</span> ({member.member_id})
+                    </p>
+                    <p className="text-white/40 text-[11px] mt-1 leading-relaxed">
+                        For your security, please update your temporary password to a private password before proceeding to the dashboard.
+                    </p>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label className="block text-[10px] font-mono text-nation-text uppercase tracking-widest mb-1.5">
+                            Current Temporary Password
+                        </label>
+                        <input
+                            type="password"
+                            value={currentPassword}
+                            onChange={(e) => setCurrentPassword(e.target.value)}
+                            placeholder="Enter current password (e.g. Udaan@2026)"
+                            className="w-full px-4 py-2.5 rounded-lg bg-black/50 border border-white/10 text-white font-mono text-sm focus:border-nation-secondary focus:outline-none focus:ring-1 focus:ring-nation-secondary transition-all"
+                            required
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-[10px] font-mono text-nation-text uppercase tracking-widest mb-1.5">
+                            New Personal Password
+                        </label>
+                        <input
+                            type="password"
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            placeholder="Minimum 6 characters"
+                            className="w-full px-4 py-2.5 rounded-lg bg-black/50 border border-white/10 text-white font-mono text-sm focus:border-nation-secondary focus:outline-none focus:ring-1 focus:ring-nation-secondary transition-all"
+                            required
+                            minLength={6}
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-[10px] font-mono text-nation-text uppercase tracking-widest mb-1.5">
+                            Confirm New Password
+                        </label>
+                        <input
+                            type="password"
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            placeholder="Re-enter new password"
+                            className="w-full px-4 py-2.5 rounded-lg bg-black/50 border border-white/10 text-white font-mono text-sm focus:border-nation-secondary focus:outline-none focus:ring-1 focus:ring-nation-secondary transition-all"
+                            required
+                        />
+                    </div>
+
+                    {error && (
+                        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-mono flex items-center gap-2">
+                            <AlertCircle size={14} className="shrink-0" />
+                            <span>{error}</span>
+                        </div>
+                    )}
+
+                    {success && (
+                        <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono flex items-center gap-2">
+                            <CheckCircle2 size={14} className="shrink-0" />
+                            <span>{success}</span>
+                        </div>
+                    )}
+
+                    <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="w-full py-3 bg-nation-secondary hover:bg-blue-600 text-white font-display font-bold uppercase tracking-[0.2em] text-xs rounded-lg transition-all shadow-lg hover:shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                        {isSubmitting ? (
+                            <>
+                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                <span>Updating Password...</span>
+                            </>
+                        ) : (
+                            <>
+                                <span>Save & Enter Flight Deck</span>
+                                <ArrowRight size={14} />
+                            </>
+                        )}
+                    </button>
+
+                    <div className="text-center pt-2">
+                        <button
+                            type="button"
+                            onClick={onLogout}
+                            className="text-white/40 hover:text-white/80 font-mono text-[10px] uppercase tracking-wider transition-colors inline-flex items-center gap-1.5"
+                        >
+                            <LogOut size={12} />
+                            <span>Sign out and cancel</span>
+                        </button>
+                    </div>
+                </form>
+            </motion.div>
+        </div>
+    );
+};
+
 // Login Page Component
 const TeamLoginPage: React.FC = () => {
     const navigate = useNavigate();
@@ -8810,6 +8988,19 @@ const TeamLoginPage: React.FC = () => {
 
     // Show dashboard if logged in
     if (loggedInMember) {
+        // Enforce password change on first login
+        if (loggedInMember.requires_password_change) {
+            return (
+                <ForcePasswordChangeScreen
+                    member={loggedInMember}
+                    onPasswordUpdated={(updatedMember) => {
+                        setLoggedInMember(updatedMember);
+                        sessionStorage.setItem('udaanMemberData', JSON.stringify(updatedMember));
+                    }}
+                    onLogout={handleLogout}
+                />
+            );
+        }
         return <MemberDashboard member={loggedInMember} onLogout={handleLogout} />;
     }
 

@@ -167,6 +167,7 @@ export interface Member {
   // Inactive status fields
   is_inactive?: boolean; // Whether member is marked as inactive
   inactive_since?: string; // Timestamp when marked inactive (ISO string)
+  requires_password_change?: boolean; // Forced password change on first login
 }
 
 /**
@@ -357,11 +358,12 @@ export const DIVISION_HEADS: { [key: string]: { name: string; member_id: string 
  * doesn't support bcryptjs-generated hashes properly
  */
 export async function loginMember(memberId: string, password: string): Promise<Member | null> {
+  const cleanId = memberId.trim().toUpperCase();
   // Fetch member with password for verification (password is excluded from response to client)
   const { data, error } = await supabase
     .from('members')
     .select('member_id, name, email, personal_email, institute_email, role, division, clearance, year, department, status, profile_pic, phone, roll_no, email_verified, password')
-    .eq('member_id', memberId.toUpperCase())
+    .eq('member_id', cleanId)
     .eq('status', 'approved')
     .single();
 
@@ -386,7 +388,13 @@ export async function loginMember(memberId: string, password: string): Promise<M
 
     // Return member WITHOUT password
     const { password: _, ...memberWithoutPassword } = data as any;
-    return memberWithoutPassword as Member;
+    const member = memberWithoutPassword as Member;
+
+    // Detect if password change is required (either via DB flag or because member is using default temporary password)
+    const isDefaultPass = (cleanId !== 'UDAAN-000' && password === 'Udaan@2026');
+    member.requires_password_change = (data as any).requires_password_change === true || isDefaultPass;
+
+    return member;
   } catch (err) {
     return null;
   }
@@ -396,10 +404,11 @@ export async function loginMember(memberId: string, password: string): Promise<M
  * Authenticate a provisional member (Stage 2) — members with status 'provisional'
  */
 export async function loginProvisional(memberId: string, password: string): Promise<Member | null> {
+  const cleanId = memberId.trim().toUpperCase();
   const { data, error } = await supabase
     .from('members')
     .select('member_id, name, email, personal_email, institute_email, role, division, clearance, year, department, status, profile_pic, phone, roll_no, email_verified, password')
-    .eq('member_id', memberId.toUpperCase())
+    .eq('member_id', cleanId)
     .eq('status', 'provisional')
     .single();
 
@@ -419,7 +428,12 @@ export async function loginProvisional(memberId: string, password: string): Prom
     if (!isValid) return null;
 
     const { password: _, ...memberWithoutPassword } = data as any;
-    return memberWithoutPassword as Member;
+    const member = memberWithoutPassword as Member;
+
+    const isDefaultPass = (cleanId !== 'UDAAN-000' && password === 'Udaan@2026');
+    member.requires_password_change = (data as any).requires_password_change === true || isDefaultPass;
+
+    return member;
   } catch (err) {
     return null;
   }
@@ -1932,14 +1946,26 @@ export async function changeMemberPassword(memberId: string, currentPassword: st
   // 3. Hash new password and update
   try {
     const hashedNewPassword = await bcrypt.hash(trimmedNew, 10);
+    // Try updating with requires_password_change reset
     const { error: updateError } = await supabase
       .from('members')
-      .update({ password: hashedNewPassword })
+      .update({ 
+        password: hashedNewPassword,
+        requires_password_change: false 
+      })
       .eq('member_id', memberId.toUpperCase());
 
     if (updateError) {
-      console.error('Password update error:', updateError);
-      return { success: false, message: 'Failed to update password' };
+      // Fallback if requires_password_change column does not exist yet
+      const { error: fallbackError } = await supabase
+        .from('members')
+        .update({ password: hashedNewPassword })
+        .eq('member_id', memberId.toUpperCase());
+
+      if (fallbackError) {
+        console.error('Password update error:', fallbackError);
+        return { success: false, message: 'Failed to update password' };
+      }
     }
   } catch (err) {
     return { success: false, message: 'Encryption error. Please try again.' };
