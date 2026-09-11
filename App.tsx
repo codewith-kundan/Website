@@ -10,7 +10,6 @@ import { HeroScene, HangarScene, CombatJetScene } from './components/QuantumScen
 import { QuadRotorStatus, SubsystemPipeline, PropulsionMetrics, RocketTrajectory, AeroFlow } from './components/Diagrams';
 import JoinCorpsPage from './pages/JoinCorps';
 import RegisterPage from './pages/Register';
-import TeamLogin from './pages/TeamLogin';
 import InductionLoginPage from './pages/InductionLogin';
 import { ArrowDown, Menu, X, Target, Rocket, Plane, Instagram, Linkedin, Phone, Palette, Briefcase, Calendar, MapPin, Trophy, Hexagon, Crown, Star, Scroll, Globe, Battery, Signal, Zap, Wind, Gauge, Activity, ArrowRight, Music, Music2, User, Eye, Users as UsersIcon, Clock, CheckCircle, Shield, Lock } from 'lucide-react';
 import Lenis from 'lenis';
@@ -756,15 +755,17 @@ const CouncilSection = () => {
     const rcLead = councilMembers.find(m => m.role.toLowerCase().includes('rc') && m.role.toLowerCase().includes('lead'));
     const rocketLead = councilMembers.find(m => m.role.toLowerCase().includes('rocket') && m.role.toLowerCase().includes('lead'));
 
-    // Fallback data for when database hasn't loaded yet
-    const fallbackData = {
-        president: { name: 'Deepan K', role: 'President' },
-        vicePresident: { name: 'Sreijan Sinha', role: 'Vice President' },
-        creativeHead: { name: 'Nirav Sayanja', role: 'Secretary & Creative Head' },
-        managementLead: { name: 'Deepa Prajapati', role: 'Management Lead & Treasurer' },
-        droneLead: { name: 'Tanya Priyadarshini', role: 'Lead: Drone' },
-        rcLead: { name: 'M Sai Krishna', role: 'Lead: RC Plane' },
-        rocketLead: { name: 'Amrit Raj Biswal', role: 'Lead: Rocketry' }
+    // Updated council members with high-res photos
+    const councilData = {
+        president: { name: 'Dipanshu Singh', role: 'President', photoUrl: '/council/dipanshu-singh.jpg' },
+        vicePresident: { name: 'Ankit K Behera', role: 'Vice President', photoUrl: '/council/ankit-behera.jpg' },
+        secretary: { name: 'Suman Pani', role: 'Secretary', photoUrl: '/council/suman-pani.jpg' },
+        treasurer: { name: 'Paawan Jain', role: 'Treasurer', photoUrl: '/council/paawan-jain.png' },
+        droneLead: { name: 'Ayusman Behera', role: 'Drone Lead', photoUrl: '/council/ayusman-behera.jpg' },
+        rocketLead: { name: 'Subham S Sahoo', role: 'Rocket Lead', photoUrl: '/council/subham-sahoo.jpg' },
+        rcLead: { name: 'Mithun Bharath', role: 'RC Lead', photoUrl: '/council/mithun-bharath.jpg' },
+        managementLead: { name: 'Rahul Kumar', role: 'Management Lead', photoUrl: '/council/rahul-kumar.jpg' },
+        prCreativeHead: { name: 'Dilesh D Patra', role: 'PR & Creative Head', photoUrl: '/council/dilesh-patra.jpg' },
     };
 
     return (
@@ -776,80 +777,95 @@ const CouncilSection = () => {
                     A multidisciplinary team of pilots, engineers, and strategists working in unison. The Council orchestrates club operations, technical research, and event management to ensure mission success.
                 </p>
                 {/* Fixed 4-column layout for main council positions */}
-                {/* Role-based slot mapping: positions are fixed, only occupants change */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-6 mb-10 lg:mb-16">
-                    {/* Slot 1: President - always first position */}
+                    {/* Slot 1: President */}
                     <MemberCard
-                        name={president?.name || fallbackData.president.name}
-                        role={president ? getDisplayRole(president.role) : fallbackData.president.role}
+                        name={councilData.president.name}
+                        role={councilData.president.role}
                         icon={<Shield size={20} />}
                         delay={0}
-                        photoUrl={president?.profile_pic}
-                        isSecretary={president ? isSecretary(president) : false}
+                        photoUrl={councilData.president.photoUrl}
+                        isSecretary={false}
                     />
-                    {/* Slot 2: Vice President - always second position */}
+                    {/* Slot 2: Vice President */}
                     <MemberCard
-                        name={vicePresident?.name || fallbackData.vicePresident.name}
-                        role={vicePresident ? getDisplayRole(vicePresident.role) : fallbackData.vicePresident.role}
+                        name={councilData.vicePresident.name}
+                        role={councilData.vicePresident.role}
                         icon={<Star size={20} />}
                         delay={0.1}
-                        photoUrl={vicePresident?.profile_pic}
-                        isSecretary={vicePresident ? isSecretary(vicePresident) : false}
+                        photoUrl={councilData.vicePresident.photoUrl}
+                        isSecretary={false}
                     />
-                    {/* Slot 3: Creative Head - always third position */}
+                    {/* Slot 3: Secretary */}
                     <MemberCard
-                        name={creativeHead?.name || fallbackData.creativeHead.name}
-                        role={creativeHead ? getDisplayRole(creativeHead.role) : 'Creative Head'}
+                        name={councilData.secretary.name}
+                        role={councilData.secretary.role}
                         icon={<Scroll size={20} />}
                         delay={0.2}
-                        photoUrl={creativeHead?.profile_pic}
-                        isSecretary={creativeHead ? isSecretary(creativeHead) : true}
+                        photoUrl={councilData.secretary.photoUrl}
+                        isSecretary={false}
                     />
-                    {/* Slot 4: Management Lead & Treasurer - always fourth position */}
+                    {/* Slot 4: Treasurer */}
                     <MemberCard
-                        name={managementLead?.name || fallbackData.managementLead.name}
-                        role={managementLead ? getDisplayRole(managementLead.role) : fallbackData.managementLead.role}
+                        name={councilData.treasurer.name}
+                        role={councilData.treasurer.role}
                         icon={<Briefcase size={20} />}
                         delay={0.3}
-                        photoUrl={managementLead?.profile_pic}
-                        isSecretary={managementLead ? isSecretary(managementLead) : false}
+                        photoUrl={councilData.treasurer.photoUrl}
+                        isSecretary={false}
                     />
                 </div>
                 <div>
                     <h3 className="font-mono text-[9px] lg:text-[10px] uppercase tracking-[0.2em] lg:tracking-[0.3em] text-nation-text/60 mb-4 lg:mb-6 flex items-center gap-3 lg:gap-4">
-                        <span className="w-6 lg:w-8 h-[1px] bg-white/10"></span>Squadron Leaders
+                        <span className="w-6 lg:w-8 h-[1px] bg-white/10"></span>Squadron & Domain Leads
                     </h3>
-                    {/* Centered 3-column layout for squadron leaders - same card size as top row */}
-                    <div className="flex justify-center">
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 lg:gap-6 w-full sm:w-3/4">
-                            {/* Slot 5: Drone Lead - always first in squadron row */}
-                            <MemberCard
-                                name={droneLead?.name || fallbackData.droneLead.name}
-                                role={droneLead ? getDisplayRole(droneLead.role) : fallbackData.droneLead.role}
-                                icon={<Hexagon size={16} />}
-                                delay={0.4}
-                                photoUrl={droneLead?.profile_pic}
-                                isSecretary={droneLead ? isSecretary(droneLead) : false}
-                            />
-                            {/* Slot 6: RC Lead - always second in squadron row */}
-                            <MemberCard
-                                name={rcLead?.name || fallbackData.rcLead.name}
-                                role={rcLead ? getDisplayRole(rcLead.role) : fallbackData.rcLead.role}
-                                icon={<Plane size={16} />}
-                                delay={0.5}
-                                photoUrl={rcLead?.profile_pic}
-                                isSecretary={rcLead ? isSecretary(rcLead) : false}
-                            />
-                            {/* Slot 7: Rocket Lead - always third in squadron row */}
-                            <MemberCard
-                                name={rocketLead?.name || fallbackData.rocketLead.name}
-                                role={rocketLead ? getDisplayRole(rocketLead.role) : fallbackData.rocketLead.role}
-                                icon={<Rocket size={16} />}
-                                delay={0.6}
-                                photoUrl={rocketLead?.profile_pic}
-                                isSecretary={rocketLead ? isSecretary(rocketLead) : false}
-                            />
-                        </div>
+                    {/* Sequence: Drone Lead, Rocket Lead, RC Lead, Management, PR & Creative */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 lg:gap-6">
+                        {/* Slot 5: Drone Lead */}
+                        <MemberCard
+                            name={councilData.droneLead.name}
+                            role={councilData.droneLead.role}
+                            icon={<Hexagon size={16} />}
+                            delay={0.4}
+                            photoUrl={councilData.droneLead.photoUrl}
+                            isSecretary={false}
+                        />
+                        {/* Slot 6: Rocket Lead */}
+                        <MemberCard
+                            name={councilData.rocketLead.name}
+                            role={councilData.rocketLead.role}
+                            icon={<Rocket size={16} />}
+                            delay={0.5}
+                            photoUrl={councilData.rocketLead.photoUrl}
+                            isSecretary={false}
+                        />
+                        {/* Slot 7: RC Lead */}
+                        <MemberCard
+                            name={councilData.rcLead.name}
+                            role={councilData.rcLead.role}
+                            icon={<Plane size={16} />}
+                            delay={0.6}
+                            photoUrl={councilData.rcLead.photoUrl}
+                            isSecretary={false}
+                        />
+                        {/* Slot 8: Management Lead */}
+                        <MemberCard
+                            name={councilData.managementLead.name}
+                            role={councilData.managementLead.role}
+                            icon={<Briefcase size={16} />}
+                            delay={0.7}
+                            photoUrl={councilData.managementLead.photoUrl}
+                            isSecretary={false}
+                        />
+                        {/* Slot 9: PR and Creative Head */}
+                        <MemberCard
+                            name={councilData.prCreativeHead.name}
+                            role={councilData.prCreativeHead.role}
+                            icon={<Palette size={16} />}
+                            delay={0.8}
+                            photoUrl={councilData.prCreativeHead.photoUrl}
+                            isSecretary={false}
+                        />
                     </div>
                 </div>
             </div>
@@ -1558,11 +1574,23 @@ const MainContent = () => {
                             </p>
 
                             <div className="flex gap-4 justify-center mb-4">
-                                <a href="#" className="w-10 h-10 flex items-center justify-center border border-white/10 text-nation-text hover:text-nation-secondary hover:border-nation-secondary transition-all rounded-full">
-                                    <Instagram size={18} />
+                                <a
+                                    href="https://www.instagram.com/udaan_nitr/"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    aria-label="Instagram"
+                                    className="w-10 h-10 flex items-center justify-center rounded-full bg-gradient-to-tr from-[#f09433] via-[#dc2743] to-[#bc1888] text-white shadow-md hover:shadow-[0_0_16px_rgba(225,48,108,0.7)] hover:scale-110 transition-all duration-300"
+                                >
+                                    <Instagram size={18} className="text-white" />
                                 </a>
-                                <a href="#" className="w-10 h-10 flex items-center justify-center border border-white/10 text-nation-text hover:text-nation-secondary hover:border-nation-secondary transition-all rounded-full">
-                                    <Linkedin size={18} />
+                                <a
+                                    href="https://www.linkedin.com/company/udaan-nitr/"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    aria-label="LinkedIn"
+                                    className="w-10 h-10 flex items-center justify-center rounded-full bg-[#0A66C2] text-white shadow-md hover:bg-[#004182] hover:shadow-[0_0_16px_rgba(10,102,194,0.7)] hover:scale-110 transition-all duration-300"
+                                >
+                                    <Linkedin size={18} className="text-white" />
                                 </a>
                             </div>
 
@@ -1666,11 +1694,23 @@ const MainContent = () => {
                             </p>
 
                             <div className="flex gap-4 justify-center mb-4">
-                                <a href="#" className="w-10 h-10 flex items-center justify-center border border-white/10 text-nation-text hover:text-nation-secondary hover:border-nation-secondary transition-all rounded-full">
-                                    <Instagram size={18} />
+                                <a
+                                    href="https://www.instagram.com/udaan_nitr/"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    aria-label="Instagram"
+                                    className="w-10 h-10 flex items-center justify-center rounded-full bg-gradient-to-tr from-[#f09433] via-[#dc2743] to-[#bc1888] text-white shadow-md hover:shadow-[0_0_16px_rgba(225,48,108,0.7)] hover:scale-110 transition-all duration-300"
+                                >
+                                    <Instagram size={18} className="text-white" />
                                 </a>
-                                <a href="#" className="w-10 h-10 flex items-center justify-center border border-white/10 text-nation-text hover:text-nation-secondary hover:border-nation-secondary transition-all rounded-full">
-                                    <Linkedin size={18} />
+                                <a
+                                    href="https://www.linkedin.com/company/udaan-nitr/"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    aria-label="LinkedIn"
+                                    className="w-10 h-10 flex items-center justify-center rounded-full bg-[#0A66C2] text-white shadow-md hover:bg-[#004182] hover:shadow-[0_0_16px_rgba(10,102,194,0.7)] hover:scale-110 transition-all duration-300"
+                                >
+                                    <Linkedin size={18} className="text-white" />
                                 </a>
                             </div>
 
@@ -2296,39 +2336,74 @@ const MainContent = () => {
                 <CouncilSection />
 
                 {/* OUR TEAM - Mobile: Reduced padding */}
-                {/* OUR TEAM - Mobile: Reduced padding */}
-                {false && (
-                    <section id="team" className="py-12 sm:py-20 md:py-24 relative overflow-hidden bg-nation-void">
-                        <ParallaxBackground text="TEAM" direction={1} />
-                        <div className="container mx-auto px-4 sm:px-6 relative z-10">
-                            <SectionTitle subtitle="The Crew">Our Team</SectionTitle>
-                            <p className="text-nation-text max-w-2xl mb-8 lg:mb-12 text-xs sm:text-sm leading-relaxed">
-                                Meet the passionate individuals who make Udaan soar. Our diverse team of engineers, designers, and aviation enthusiasts work together to push the boundaries of student-led aerospace innovation.
-                            </p>
+                <section id="team" className="py-12 sm:py-20 md:py-24 relative overflow-hidden bg-nation-void">
+                    <ParallaxBackground text="SQUAD" direction={1} />
+                    <div className="container mx-auto px-4 sm:px-6 relative z-10">
+                        <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 lg:mb-12">
+                            <div>
+                                <SectionTitle subtitle="The Crew">Team Udaan</SectionTitle>
+                                <p className="text-nation-text max-w-2xl text-xs sm:text-sm leading-relaxed mt-2">
+                                    The engineers, innovators, and dreamers pioneering aeromodelling, autonomous UAVs, and rocketry at NIT Rourkela.
+                                </p>
+                            </div>
+                            <div className="hidden md:flex items-center gap-3 font-mono text-[10px] text-nation-secondary bg-nation-secondary/10 border border-nation-secondary/20 px-3 py-1.5 rounded-full uppercase tracking-wider">
+                                <span className="w-2 h-2 rounded-full bg-nation-secondary animate-pulse" />
+                                <span>Official Flight Squadron</span>
+                            </div>
+                        </div>
 
-                            {/* Member Portal Button removed per request */}
+                        {/* Team Photo Container */}
+                        <div className="relative group rounded-xl sm:rounded-2xl overflow-hidden border border-white/10 bg-nation-panel/40 backdrop-blur-sm shadow-[0_20px_50px_rgba(0,0,0,0.8)] hover:border-nation-secondary/40 transition-all duration-500">
+                            {/* HUD Corners */}
+                            <HudCorner position="tl" />
+                            <HudCorner position="tr" />
+                            <HudCorner position="bl" />
+                            <HudCorner position="br" />
 
-                            {/* Team Photo */}
-                            <div
-                                className="relative rounded-xl overflow-hidden border border-white/10 bg-nation-panel/40"
-                            >
-                                <div className="aspect-[21/9] bg-gradient-to-br from-nation-panel to-nation-void flex items-center justify-center relative">
-                                    <div className="text-center">
-                                        <div className="w-24 h-24 mx-auto mb-4 rounded-full border-2 border-dashed border-white/20 flex items-center justify-center">
-                                            <Crown size={32} className="text-nation-secondary" />
+                            {/* Image wrapper with subtle hover zoom */}
+                            <div className="relative overflow-hidden">
+                                <img
+                                    src="/team-photo.jpg"
+                                    alt="Team Udaan - Aerial Robotics Club, NIT Rourkela"
+                                    className="w-full h-auto max-h-[650px] object-cover object-center transition-transform duration-700 ease-out group-hover:scale-[1.01]"
+                                    loading="lazy"
+                                />
+
+                                {/* Subtle gradient vignettes for seamless dark-theme integration */}
+                                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-nation-void/90 via-transparent to-black/30" />
+                                <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10 rounded-xl" />
+
+                                {/* Overlay Caption Bar */}
+                                <div className="absolute bottom-0 inset-x-0 p-4 sm:p-6 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
+                                    <div>
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                            <span className="text-[10px] font-mono uppercase tracking-widest text-emerald-400">Team Roster • Active</span>
                                         </div>
-                                        <p className="text-nation-text font-mono text-sm uppercase tracking-widest">Team Photo</p>
-                                        <p className="text-white/30 text-xs mt-2">Add your team image here</p>
+                                        <h4 className="text-white font-display text-sm sm:text-base md:text-lg uppercase tracking-wider font-bold">
+                                            Aeromodelling & Drone Robotics Club
+                                        </h4>
+                                        <p className="text-white/60 font-mono text-[10px] sm:text-xs tracking-wider">
+                                            National Institute of Technology, Rourkela
+                                        </p>
                                     </div>
-                                    <HudCorner position="tl" />
-                                    <HudCorner position="tr" />
-                                    <HudCorner position="bl" />
-                                    <HudCorner position="br" />
+
+                                    {/* Division Pills */}
+                                    <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                                        {['Drone', 'RC Plane', 'Rocketry', 'Creative', 'Management'].map((div) => (
+                                            <span
+                                                key={div}
+                                                className="px-2.5 py-1 text-[9px] sm:text-[10px] font-mono uppercase tracking-wider bg-white/10 hover:bg-white/20 text-white/90 rounded-md border border-white/10 backdrop-blur-md transition-colors"
+                                            >
+                                                {div}
+                                            </span>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </section>
-                )}
+                    </div>
+                </section>
 
                 {/* FOOTER - Mobile: Reduced padding */}
                 <footer className="bg-nation-black border-t border-white/5 pt-10 lg:pt-16 pb-20 lg:pb-24 relative z-20">
@@ -2350,9 +2425,31 @@ const MainContent = () => {
                                     Odisha, India - 769008.
                                 </p>
                                 <div className="flex gap-3 lg:gap-4">
-                                    <a href="#" className="w-7 h-7 lg:w-8 lg:h-8 flex items-center justify-center border border-white/10 text-nation-text hover:text-white hover:border-white transition-all rounded-full"><Instagram size={12} className="lg:w-3.5 lg:h-3.5" /></a>
-                                    <a href="#" className="w-7 h-7 lg:w-8 lg:h-8 flex items-center justify-center border border-white/10 text-nation-text hover:text-nation-secondary hover:border-nation-secondary transition-all rounded-full"><Linkedin size={12} className="lg:w-3.5 lg:h-3.5" /></a>
-                                    <a href="#" className="w-7 h-7 lg:w-8 lg:h-8 flex items-center justify-center border border-white/10 text-nation-text hover:text-nation-secondary hover:border-nation-secondary transition-all rounded-full"><Globe size={12} className="lg:w-3.5 lg:h-3.5" /></a>
+                                    <a
+                                        href="https://www.instagram.com/udaan_nitr/"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        aria-label="Instagram"
+                                        className="w-8 h-8 lg:w-9 lg:h-9 flex items-center justify-center rounded-full bg-gradient-to-tr from-[#f09433] via-[#dc2743] to-[#bc1888] text-white shadow-md hover:shadow-[0_0_16px_rgba(225,48,108,0.7)] hover:scale-110 transition-all duration-300"
+                                    >
+                                        <Instagram size={14} className="lg:w-4 lg:h-4 text-white" />
+                                    </a>
+                                    <a
+                                        href="https://www.linkedin.com/company/udaan-nitr/"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        aria-label="LinkedIn"
+                                        className="w-8 h-8 lg:w-9 lg:h-9 flex items-center justify-center rounded-full bg-[#0A66C2] text-white shadow-md hover:bg-[#004182] hover:shadow-[0_0_16px_rgba(10,102,194,0.7)] hover:scale-110 transition-all duration-300"
+                                    >
+                                        <Linkedin size={14} className="lg:w-4 lg:h-4 text-white" />
+                                    </a>
+                                    <button
+                                        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                                        aria-label="Scroll to top"
+                                        className="w-8 h-8 lg:w-9 lg:h-9 flex items-center justify-center rounded-full bg-gradient-to-tr from-[#0284c7] to-[#0ea5e9] text-white shadow-md hover:shadow-[0_0_16px_rgba(14,165,233,0.7)] hover:scale-110 transition-all duration-300 cursor-pointer"
+                                    >
+                                        <Globe size={14} className="lg:w-4 lg:h-4 text-white" />
+                                    </button>
                                 </div>
                             </div>
 
@@ -2363,14 +2460,15 @@ const MainContent = () => {
                                     <li><button onClick={() => scrollToSection('fleet')} className="hover:text-nation-secondary transition-colors">Fleet</button></li>
                                     <li><button onClick={() => scrollToSection('events')} className="hover:text-nation-secondary transition-colors">Events</button></li>
                                     <li><button onClick={() => scrollToSection('squadron')} className="hover:text-nation-secondary transition-colors">Council</button></li>
+                                    <li><button onClick={() => scrollToSection('team')} className="hover:text-nation-secondary transition-colors">Crew</button></li>
                                 </ul>
                             </div>
 
                             <div>
                                 <h3 className="text-white font-display uppercase tracking-widest mb-4 lg:mb-6 text-xs lg:text-sm font-bold">Channels</h3>
                                 <ul className="space-y-2 lg:space-y-3 text-[10px] lg:text-xs font-mono text-nation-text uppercase tracking-wider">
-                                    <li className="flex items-center gap-1.5 lg:gap-2"><Phone size={10} className="text-nation-secondary lg:w-3 lg:h-3" /><span>Deepan: +91 98941 29722</span></li>
-                                    <li className="flex items-center gap-1.5 lg:gap-2"><Phone size={10} className="text-nation-secondary lg:w-3 lg:h-3" /><span>Nirav: +91 93138 12785</span></li>
+                                    <li className="flex items-center gap-1.5 lg:gap-2"><Phone size={10} className="text-nation-secondary lg:w-3 lg:h-3" /><a href="tel:+917880283228" className="hover:text-nation-secondary transition-colors"><span>Dipanshu Singh: +91 78802 83228</span></a></li>
+                                    <li className="flex items-center gap-1.5 lg:gap-2"><Phone size={10} className="text-nation-secondary lg:w-3 lg:h-3" /><a href="tel:+919343224003" className="hover:text-nation-secondary transition-colors"><span>Paawan Jain: +91 93432 24003</span></a></li>
                                 </ul>
                             </div>
                         </div>
@@ -2383,7 +2481,7 @@ const MainContent = () => {
                         {/* Website Credit */}
                         <div className="border-t border-white/5 mt-4 lg:mt-6 pt-3 lg:pt-4 text-center">
                             <p className="text-[9px] lg:text-[10px] font-mono text-nation-text/50 tracking-wider">
-                                Website made by: <span className="text-nation-secondary">Nirav Sayanja</span> (Secretary & Creative Head)
+                                Website made by: <span className="text-nation-secondary">Team Udaan</span>
                             </p>
                         </div>
 

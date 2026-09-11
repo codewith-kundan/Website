@@ -6,6 +6,11 @@
     <meta name="theme-color" content="#0B0C10" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- Favicon -->
+    <link rel="icon" type="image/webp" href="/udaan-logo.webp" />
+    <link rel="apple-touch-icon" href="/udaan-logo.webp" />
+    <meta name="description" content="Official website of Team Udaan - Aerial Robotics Club, NIT Rourkela." />
+
     <!-- Security headers -->
     <meta http-equiv="X-Content-Type-Options" content="nosniff" />
     <meta http-equiv="X-Frame-Options" content="DENY" />
@@ -146,71 +151,9 @@
         pointer-events: none;
       }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@18.2.0",
-    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-    "react-dom/": "https://esm.sh/react-dom@18.2.0/",
-    "react/": "https://esm.sh/react@18.2.0/",
-    "@react-three/fiber": "https://esm.sh/@react-three/fiber@8.15.16?external=react,react-dom,three",
-    "@react-three/drei": "https://esm.sh/@react-three/drei@9.99.0?external=react,react-dom,three,@react-three/fiber",
-    "three": "https://esm.sh/three@0.160.0",
-    "framer-motion": "https://esm.sh/framer-motion@10.18.0?external=react,react-dom",
-    "lucide-react": "https://esm.sh/lucide-react@0.344.0?external=react,react-dom",
-    "lenis": "https://esm.sh/lenis@1.1.5"
-  }
-}
-</script>
-</head>
+  </head>
   <body>
     <div id="root"></div>
     <script type="module" src="./index.tsx"></script>
-    <!-- Security: Disable right-click and common dev tools shortcuts in production -->
-    <script>
-      (function() {
-        // Only apply in production (when not on localhost)
-        if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') return;
-        
-        // Disable right-click context menu
-        document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
-        
-        // Disable common keyboard shortcuts for dev tools
-        document.addEventListener('keydown', function(e) {
-          // F12
-          if (e.key === 'F12') { e.preventDefault(); return false; }
-          // Ctrl+Shift+I (Dev Tools)
-          if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'I') { e.preventDefault(); return false; }
-          // Ctrl+Shift+J (Console)
-          if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'J') { e.preventDefault(); return false; }
-          // Ctrl+U (View Source)
-          if ((e.ctrlKey || e.metaKey) && e.key === 'u') { e.preventDefault(); return false; }
-          // Ctrl+Shift+C (Inspect Element)
-          if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'C') { e.preventDefault(); return false; }
-        });
-        
-        // Disable text selection on sensitive elements
-        document.addEventListener('selectstart', function(e) {
-          if (e.target.closest('.no-select')) { e.preventDefault(); }
-        });
-        
-        // Clear console periodically to deter snooping
-        setInterval(function() { console.clear(); }, 1000);
-        
-        // Detect dev tools via debugger timing (basic detection)
-        (function detectDevTools() {
-          var devtools = { open: false };
-          setInterval(function() {
-            var start = performance.now();
-            debugger;
-            var diff = performance.now() - start;
-            devtools.open = diff > 100;
-            if (devtools.open) {
-              document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#0B0C10;color:white;font-family:sans-serif;"><div style="text-align:center;"><h1>🔒 Access Restricted</h1><p>Developer tools are not allowed on this page.</p></div></div>';
-            }
-          }, 500);
-        })();
-      })();
-    </script>
   </body>
 </html>

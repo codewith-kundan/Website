@@ -6,9 +6,11 @@ export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     const isDev = mode === 'development';
     return {
+      base: './',
       server: {
         port: 3000,
         host: 'localhost',
+        open: true,
       },
       build: {
         sourcemap: isDev ? true : false,
