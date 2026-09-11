@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Target, Rocket, Plane, Hexagon, User, Mail, Phone, GraduationCap, BookOpen, Send, CheckCircle, Palette, Briefcase, AlertCircle, Lock } from 'lucide-react';
+import { ArrowLeft, Target, Rocket, Plane, Hexagon, User, Mail, Phone, GraduationCap, BookOpen, Send, CheckCircle, Palette, Briefcase, AlertCircle, Lock, Code } from 'lucide-react';
 import { submitApplicant, checkExistingApplicant } from '../utils/supabase';
 import { formatName } from '../utils/formatters';
 import { sendVerificationEmail, sendCredentialsEmail } from '../utils/email';
@@ -237,7 +237,8 @@ const JoinCorpsPage = () => {
         { id: 'drone', label: 'Drone', icon: Hexagon },
         { id: 'rcplane', label: 'RC Plane', icon: Plane },
         { id: 'rocketry', label: 'Rocketry', icon: Rocket },
-        { id: 'creative', label: 'Creative & Web', icon: Palette },
+        { id: 'creative', label: 'Creative', icon: Palette },
+        { id: 'webdev', label: 'Web Dev', icon: Code },
         { id: 'management', label: 'Management', icon: Briefcase }
     ];
 
@@ -701,7 +702,7 @@ const JoinCorpsPage = () => {
                             <p className="text-nation-text text-[11px] sm:text-xs mb-3 sm:mb-6">Select the divisions you're interested in (select at least one)</p>
 
                             {/* Mobile: 3 columns with smaller cards */}
-                            <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4">
+                            <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-4">
                                 {interests.map(interest => (
                                     <button
                                         key={interest.id}

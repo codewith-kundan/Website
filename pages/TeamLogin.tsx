@@ -13,7 +13,7 @@ import {
     ListTodo, ClipboardList, Bell, Settings, LogOut, BarChart3, Users,
     FileText, MessageSquare, Award, TrendingUp, Circle, Send, X, Trash2, UserPlus,
     Eye, Edit3, MoreVertical, Phone, Mail, Hash, ExternalLink, Camera, Upload, Search,
-    ToggleLeft, ToggleRight
+    ToggleLeft, ToggleRight, Code
 } from 'lucide-react';
 
 import {
@@ -3227,7 +3227,7 @@ const IDCardTab = ({ member }: { member: Member }) => {
 const InductionApprovalsTab = () => {
     const [provisionalMembers, setProvisionalMembers] = useState<Member[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'All' | 'Drone' | 'RC Plane' | 'Rocketry' | 'Management' | 'Creative/Web-Dev'>('All');
+    const [activeTab, setActiveTab] = useState<'All' | 'Drone' | 'RC Plane' | 'Rocketry' | 'Management' | 'Creative' | 'Web Dev'>('All');
     const [selectedMember, setSelectedMember] = useState<Member | null>(null);
     const [confirmDivisions, setConfirmDivisions] = useState<string[]>([]);
     const [isApproving, setIsApproving] = useState(false);
@@ -3255,15 +3255,13 @@ const InductionApprovalsTab = () => {
         fetchProvisional();
     }, []);
 
-    // Helper to filter - normalize tab labels to stored interest IDs
-    // Stored IDs: 'drone', 'rcplane', 'rocketry', 'creative', 'management'
-    // Tab labels: 'Drone', 'RC Plane', 'Rocketry', 'Management', 'Creative/Web-Dev'
     const tabToStoredId: { [key: string]: string[] } = {
         'Drone': ['drone'],
         'RC Plane': ['rcplane', 'rc plane', 'rc'],
         'Rocketry': ['rocketry', 'rocket'],
         'Management': ['management'],
-        'Creative/Web-Dev': ['creative', 'web', 'web-dev']
+        'Creative': ['creative'],
+        'Web Dev': ['web', 'web-dev', 'webdev']
     };
 
     const filteredMembers = activeTab === 'All'
@@ -3278,17 +3276,12 @@ const InductionApprovalsTab = () => {
     const handleApproveClick = (member: Member) => {
         setSelectedMember(member);
 
-        // Determine initial selection based on context
-        // If viewing from "Drone" tab, pre-select only "Drone".
-        // If viewing from "All" tab, allow approving all requested divisions.
         let initialSelection: string[] = [];
 
         if (activeTab !== 'All') {
             initialSelection = [activeTab];
         } else {
-            // Default to all user's divisions if in "All" tab
             const rawDivs = member.division?.split(',') || [];
-            // Map raw strings to proper Display Names
             const displayMap: { [key: string]: string } = {
                 'drone': 'Drone',
                 'rc plane': 'RC Plane',
@@ -3296,20 +3289,19 @@ const InductionApprovalsTab = () => {
                 'rocketry': 'Rocketry',
                 'rocket': 'Rocketry',
                 'management': 'Management',
-                'creative': 'Creative/Web-Dev',
-                'web-dev': 'Creative/Web-Dev'
+                'creative': 'Creative',
+                'web-dev': 'Web Dev',
+                'web': 'Web Dev',
+                'webdev': 'Web Dev'
             };
 
             initialSelection = rawDivs
                 .map(d => d.trim().toLowerCase())
                 .map(d => displayMap[d] || d) // Normalize
-                // Filter to only valid tabs
-                .filter(d => ['Drone', 'RC Plane', 'Rocketry', 'Management', 'Creative/Web-Dev'].includes(d));
+                .filter(d => ['Drone', 'RC Plane', 'Rocketry', 'Management', 'Creative', 'Web Dev'].includes(d));
 
-            // Dedupe
             initialSelection = [...new Set(initialSelection)];
 
-            // Fallback if empty logic (e.g. invalid string)
             if (initialSelection.length === 0) initialSelection = ['Drone'];
         }
 
@@ -3365,7 +3357,7 @@ const InductionApprovalsTab = () => {
 
             {/* Division Filter Tabs */}
             <div className="flex gap-2 p-1 bg-gray-800/50 rounded-lg overflow-x-auto">
-                {['All', 'Drone', 'RC Plane', 'Rocketry', 'Management', 'Creative/Web-Dev'].map(div => (
+                {['All', 'Drone', 'RC Plane', 'Rocketry', 'Management', 'Creative', 'Web Dev'].map(div => (
                     <button
                         key={div}
                         onClick={() => setActiveTab(div as any)}
@@ -3456,9 +3448,10 @@ const InductionApprovalsTab = () => {
                                             'rocketry': 'Rocketry',
                                             'rocket': 'Rocketry',
                                             'management': 'Management',
-                                            'creative': 'Creative/Web-Dev',
-                                            'web-dev': 'Creative/Web-Dev',
-                                            'web': 'Creative/Web-Dev'
+                                            'creative': 'Creative',
+                                            'web-dev': 'Web Dev',
+                                            'web': 'Web Dev',
+                                            'webdev': 'Web Dev'
                                         };
 
                                         // Parse member's divisions and get unique display labels
@@ -3577,7 +3570,8 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
         { id: 'rc', label: 'RC Subsystem', icon: <Plane size={16} /> },
         { id: 'rocket', label: 'Rocketry', icon: <Rocket size={16} /> },
         { id: 'management', label: 'Management Team', icon: <Briefcase size={16} /> },
-        { id: 'creative', label: 'Creative/Web-Dev', icon: <Scroll size={16} /> },
+        { id: 'creative', label: 'Creative', icon: <Palette size={16} /> },
+        { id: 'webdev', label: 'Web Dev', icon: <Code size={16} /> },
     ];
 
     // Map member to divisions (can belong to multiple)
@@ -3593,8 +3587,6 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
         }
 
         // Map division field from database to filter categories
-        // Handle comma-separated divisions (e.g., "Rocketry, Creative/Web-Dev, Drone")
-        // These match the values from AddMemberTab: 'Drone', 'RC Plane', 'Rocketry', 'Management', 'Creative/Web-Dev'
         if (divisionLower.includes('drone')) {
             divisionsList.push('drone');
         }
@@ -3607,8 +3599,11 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
         if (divisionLower.includes('management')) {
             divisionsList.push('management');
         }
-        if (divisionLower.includes('creative') || divisionLower.includes('web')) {
+        if (divisionLower.includes('creative')) {
             divisionsList.push('creative');
+        }
+        if (divisionLower.includes('web')) {
+            divisionsList.push('webdev');
         }
 
         // Also check role for additional context (for council members who may have subsystem roles)
@@ -3616,7 +3611,8 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
         if ((role.includes('plane') || role.includes('rc')) && !divisionsList.includes('rc')) divisionsList.push('rc');
         if (role.includes('rocket') && !divisionsList.includes('rocket')) divisionsList.push('rocket');
         if ((role.includes('management') || role.includes('treasurer')) && !divisionsList.includes('management')) divisionsList.push('management');
-        if ((role.includes('creative') || role.includes('web') || role.includes('design')) && !divisionsList.includes('creative')) divisionsList.push('creative');
+        if ((role.includes('creative') || role.includes('design') || role.includes('pr')) && !divisionsList.includes('creative')) divisionsList.push('creative');
+        if ((role.includes('web') || role.includes('dev') || role.includes('software')) && !divisionsList.includes('webdev')) divisionsList.push('webdev');
 
         return [...new Set(divisionsList)]; // Remove duplicates
     };
@@ -4490,7 +4486,7 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
                                         Team / Technical Divisions
                                     </label>
                                     <div className="grid grid-cols-2 gap-2">
-                                        {['Drone', 'RC Plane', 'Rocketry', 'Management', 'Creative/Web-Dev'].map(divName => {
+                                        {['Drone', 'RC Plane', 'Rocketry', 'Management', 'Creative', 'Web Dev'].map(divName => {
                                             const isSelected = editDivision.some(d => d.toLowerCase() === divName.toLowerCase());
                                             return (
                                                 <button
@@ -4828,7 +4824,7 @@ const SettingsTab = ({ currentMember, onLogout }: { currentMember: Member; onLog
     const [editPhone, setEditPhone] = useState(currentMember.phone || '');
 
     // Valid subsystem divisions only (not roles like "Council")
-    const validSubsystems = ['Drone', 'RC Plane', 'Rocketry', 'Management', 'Creative/Web-Dev'];
+    const validSubsystems = ['Drone', 'RC Plane', 'Rocketry', 'Management', 'Creative', 'Web Dev', 'Creative/Web-Dev'];
     const [editDivisions, setEditDivisions] = useState<string[]>(
         currentMember.division
             ? currentMember.division.split(',').map(d => d.trim()).filter(d => validSubsystems.includes(d))
@@ -4981,7 +4977,7 @@ const SettingsTab = ({ currentMember, onLogout }: { currentMember: Member; onLog
     const detectedDept = departmentsList.find(d => d.code === detectedDeptCode);
     const department = detectedDept ? `${detectedDept.name} (${detectedDept.code})` : '';
 
-    const divisions = ['Drone', 'RC Plane', 'Rocketry', 'Management', 'Creative/Web-Dev'];
+    const divisions = ['Drone', 'RC Plane', 'Rocketry', 'Management', 'Creative', 'Web Dev'];
 
     const toggleDivision = (div: string) => {
         setEditDivisions(prev =>
@@ -5889,7 +5885,7 @@ const SettingsTab = ({ currentMember, onLogout }: { currentMember: Member; onLog
 
                                                     {/* Current Divisions (locked) - only show valid subsystems */}
                                                     {(() => {
-                                                        const validDivisions = ['Drone', 'RC Plane', 'Rocketry', 'Management', 'Creative/Web-Dev'];
+                                                        const validDivisions = ['Drone', 'RC Plane', 'Rocketry', 'Management', 'Creative', 'Web Dev', 'Creative/Web-Dev'];
                                                         const currentDivs = currentMember.division
                                                             ? currentMember.division.split(',').map(d => d.trim()).filter(d => validDivisions.includes(d))
                                                             : [];
@@ -5919,7 +5915,7 @@ const SettingsTab = ({ currentMember, onLogout }: { currentMember: Member; onLog
 
                                                     {/* Request to Join Division */}
                                                     {(() => {
-                                                        const validDivisions = ['Drone', 'RC Plane', 'Rocketry', 'Management', 'Creative/Web-Dev'];
+                                                        const validDivisions = ['Drone', 'RC Plane', 'Rocketry', 'Management', 'Creative', 'Web Dev'];
                                                         const currentDivs = currentMember.division
                                                             ? currentMember.division.split(',').map(d => d.trim()).filter(d => validDivisions.includes(d))
                                                             : [];
@@ -6071,7 +6067,7 @@ const AssignTaskTab = ({ currentMember }: { currentMember: Member }) => {
         'Research', 'Finance', 'Coordination', 'Content', 'Procurement', 'Other'
     ];
 
-    const divisionOptions = ['Drone', 'RC Plane', 'Rocketry', 'Management', 'Creative/Web-Dev'];
+    const divisionOptions = ['Drone', 'RC Plane', 'Rocketry', 'Management', 'Creative', 'Web Dev'];
 
     useEffect(() => {
         const loadData = async () => {
@@ -6210,6 +6206,10 @@ Description: ${newTask.description || "No description provided."}`,
                 return div.includes('rocket');
             } else if (filterDiv === 'management') {
                 return div.includes('manage');
+            } else if (filterDiv === 'creative') {
+                return div.includes('creative');
+            } else if (filterDiv === 'web dev') {
+                return div.includes('web');
             } else if (filterDiv === 'creative/web-dev') {
                 return div.includes('creative') || div.includes('web');
             } else {
@@ -6753,7 +6753,7 @@ const AddMemberTab = ({ currentMember }: { currentMember: Member }) => {
         }
     }, [rollNo]);
 
-    const divisions = ['Drone', 'RC Plane', 'Rocketry', 'Management', 'Creative/Web-Dev'];
+    const divisions = ['Drone', 'RC Plane', 'Rocketry', 'Management', 'Creative', 'Web Dev'];
 
     const toggleDivision = (div: string) => {
         setSelectedDivisions(prev =>
