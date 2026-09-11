@@ -238,33 +238,7 @@ async function generatePDF() {
       font-weight: 600;
       letter-spacing: 0.3px;
     }
-    .notice-box {
-      background: #f0fdf4;
-      border: 1px solid #bbf7d0;
-      border-left: 4px solid #16a34a;
-      border-radius: 6px;
-      padding: 8px 12px;
-      margin-bottom: 14px;
-      display: flex;
-      justify-content: space-between;
-      gap: 16px;
-    }
-    .notice-box .col {
-      flex: 1;
-    }
-    .notice-box h4 {
-      margin: 0 0 2px 0;
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: #15803d;
-      font-weight: 700;
-    }
-    .notice-box p {
-      margin: 0;
-      font-size: 9.5px;
-      color: #334155;
-    }
+
     .section-title {
       font-size: 12px;
       font-weight: 800;
@@ -426,19 +400,7 @@ async function generatePDF() {
     </div>
   </div>
 
-  <div class="notice-box">
-    <div class="col">
-      <h4>Portal Login & Authentication</h4>
-      <p><strong>URL:</strong> https://udaan-nitr.vercel.app/#/team-login (or localhost:3000)</p>
-      <p><strong>Login ID:</strong> Member's designated User ID (e.g. UDAAN-2001) or email address</p>
-    </div>
-    <div class="col">
-      <h4>First-Login Password Policy</h4>
-      <p><strong>Super Admin (UDAAN-000):</strong> Initial temporary password <code>Admin@2026</code></p>
-      <p><strong>All Members & Council Leads:</strong> Initial temporary password <code>Udaan@2026</code></p>
-      <p><em>*All accounts must update password upon their first login before entering flight deck.</em></p>
-    </div>
-  </div>
+
 
   <!-- SECTION 1: EXECUTIVE COUNCIL LEADERSHIP -->
   <div class="section-title">
