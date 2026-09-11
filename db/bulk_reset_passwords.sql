@@ -8,11 +8,11 @@
 -- Step 1: Add requires_password_change column if not present (default to true for forced first-login change)
 ALTER TABLE members ADD COLUMN IF NOT EXISTS requires_password_change BOOLEAN DEFAULT true;
 
--- Step 2: Set Super Admin (UDAAN-000) password to Admin@2026
+-- Step 2: Set Super Admin (UDAAN-000) password to SuperAdmin@2026
 -- and enforce forced password change on first login
--- (Bcrypt hash of "Admin@2026" with salt cost 10)
+-- (Bcrypt hash of "SuperAdmin@2026" with salt cost 10)
 UPDATE members
-SET password = '$2a$10$ScN..YQEHHedOqgow3qPOOSG383sGVTu429nRd21URKnov.39.TLW',
+SET password = '$2a$10$8O8gejl.5y3mS4U8Ab/U7.Unq/aF16L2torfAiIOViaeJME/U21C2',
     requires_password_change = true,
     updated_at = NOW()
 WHERE member_id = 'UDAAN-000';

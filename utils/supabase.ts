@@ -411,7 +411,7 @@ export async function loginMember(memberId: string, password: string): Promise<M
     // Detect if password change is required for ANY member (including Super Admin UDAAN-000 and Executive Council leads):
     // 1. If explicitly flagged true in the database
     // 2. Or if using default temporary initial passwords ('Udaan@2026' or 'Admin@2026')
-    const isDefaultPass = (password === 'Udaan@2026' || password === 'Admin@2026');
+    const isDefaultPass = (password === 'Udaan@2026' || password === 'SuperAdmin@2026' || password === 'Admin@2026');
     const dbFlag = (data as any).requires_password_change;
     member.requires_password_change = dbFlag === true || (dbFlag !== false && isDefaultPass);
 
@@ -468,7 +468,7 @@ export async function loginProvisional(memberId: string, password: string): Prom
     const { password: _, ...memberWithoutPassword } = data as any;
     const member = memberWithoutPassword as Member;
 
-    const isDefaultPass = (password === 'Udaan@2026' || password === 'Admin@2026');
+    const isDefaultPass = (password === 'Udaan@2026' || password === 'SuperAdmin@2026' || password === 'Admin@2026');
     const dbFlag = (data as any).requires_password_change;
     member.requires_password_change = dbFlag === true || (dbFlag !== false && isDefaultPass);
 
@@ -1981,7 +1981,7 @@ export async function changeMemberPassword(memberId: string, currentPassword: st
   if (trimmedNew === trimmedCurrent) {
     return { success: false, message: 'New password cannot be the same as your current password' };
   }
-  if (trimmedNew === 'Udaan@2026' || trimmedNew === 'Admin@2026') {
+  if (trimmedNew === 'Udaan@2026' || trimmedNew === 'SuperAdmin@2026' || trimmedNew === 'Admin@2026') {
     return { success: false, message: 'Please choose a personal password different from the temporary default' };
   }
 

@@ -9078,7 +9078,7 @@ const ForcePasswordChangeScreen: React.FC<{
     onLogout: () => void;
 }> = ({ member, onPasswordUpdated, onLogout }) => {
     const isSuperAdmin = member.member_id === 'UDAAN-000';
-    const [currentPassword, setCurrentPassword] = useState(isSuperAdmin ? 'Admin@2026' : 'Udaan@2026');
+    const [currentPassword, setCurrentPassword] = useState(isSuperAdmin ? 'SuperAdmin@2026' : 'Udaan@2026');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -9100,7 +9100,7 @@ const ForcePasswordChangeScreen: React.FC<{
             return;
         }
 
-        if (newPassword === 'Udaan@2026' || newPassword === 'Admin@2026') {
+        if (newPassword === 'Udaan@2026' || newPassword === 'SuperAdmin@2026' || newPassword === 'Admin@2026') {
             setError('Please choose a personal password different from the temporary default');
             return;
         }
@@ -9168,7 +9168,7 @@ const ForcePasswordChangeScreen: React.FC<{
                             type="password"
                             value={currentPassword}
                             onChange={(e) => setCurrentPassword(e.target.value)}
-                            placeholder={isSuperAdmin ? "Enter current password (e.g. Admin@2026)" : "Enter current password (e.g. Udaan@2026)"}
+                            placeholder={isSuperAdmin ? "Enter current password (e.g. SuperAdmin@2026)" : "Enter current password (e.g. Udaan@2026)"}
                             className="w-full px-4 py-2.5 rounded-lg bg-black/50 border border-white/10 text-white font-mono text-sm focus:border-nation-secondary focus:outline-none focus:ring-1 focus:ring-nation-secondary transition-all"
                             required
                         />
