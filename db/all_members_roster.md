@@ -67,10 +67,10 @@
 | **UDAAN-2021** | Ankit Kumar Behera | Vice President | Rocketry | 3 | 5 | `approved` |
 | **UDAAN-2022** | Shubham Shekhar Sahoo | Rocket Lead | Rocketry | 3 | 5 | `approved` |
 | **UDAAN-2023** | Shubham Kumar Pati | Member | Drone | 3 | 3 | `approved` |
-| **UDAAN-3001** | Nilesh Kumar | Member | Rocketry, Creative/Web-Dev | 4 | 4 | `approved` |
-| **UDAAN-3002** | Ritik Pandey | Member | Rocketry | 4 | 4 | `approved` |
-| **UDAAN-3003** | Sandeep Sahoo | Member | Rocketry, RC Plane | 4 | 4 | `approved` |
-| **UDAAN-3004** | Anish Samal | Member | Drone | 4 | 4 | `approved` |
+| **UDAAN-3001** | Nilesh Kumar | Senior Member | Rocketry, Creative/Web-Dev | 4 | 4 | `approved` |
+| **UDAAN-3002** | Ritik Pandey | Senior Member | Rocketry | 4 | 4 | `approved` |
+| **UDAAN-3003** | Sandeep Sahoo | Senior Member | Rocketry, RC Plane | 4 | 4 | `approved` |
+| **UDAAN-3004** | Anish Samal | Senior Member | Drone | 4 | 4 | `approved` |
 | **UDAAN-4001** | Swapnil Gaikwad | Mentor | Drone | - | 4 | `approved` |
 | **UDAAN-4002** | Kuldip Mandal | Mentor | RC Plane, Management | - | 4 | `approved` |
 | **UDAAN-4003** | Bhabesh Behera | Mentor | Drone | - | 4 | `approved` |
