@@ -3523,11 +3523,16 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
     const [isDeleting, setIsDeleting] = useState(false);
     const [togglingInactive, setTogglingInactive] = useState<string | null>(null);
 
-    // Add state for edit modal
+    // State for edit modal
     const [editMember, setEditMember] = useState<Member | null>(null);
-    const [editYear, setEditYear] = useState('');
-    const [editDivision, setEditDivision] = useState('');
+    const [editName, setEditName] = useState('');
+    const [editRole, setEditRole] = useState('');
+    const [editYear, setEditYear] = useState<number | null>(null);
+    const [editDivision, setEditDivision] = useState<string[]>([]);
+    const [editClearance, setEditClearance] = useState<number>(3);
     const [editLoading, setEditLoading] = useState(false);
+    const [editSuccess, setEditSuccess] = useState(false);
+    const [editError, setEditError] = useState<string | null>(null);
 
     const isCouncil = currentMember?.clearance === 5;
     const superAdmin = currentMember ? isSuperAdmin(currentMember.member_id) : false;
@@ -3676,6 +3681,89 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
     const canDeleteMember = (member: Member): boolean => {
         // Only council can delete, and cannot delete other council members
         return isCouncil && member.clearance < 5;
+    };
+
+    const canEditMember = (target: Member): boolean => {
+        if (!currentMember) return false;
+        if (target.member_id === 'UDAAN-000') return false; // Super Admin cannot be edited
+        if (superAdmin) return true; // Super Admin can edit anyone
+        if (isCouncil) {
+            const isPresident = currentMember.role?.toLowerCase().includes('president') && !currentMember.role?.toLowerCase().includes('vice');
+            if (isPresident) return true; // President can edit everyone except Super Admin
+            // Other EB leads can edit members, mentors, and themselves
+            return target.clearance < 5 || target.member_id === currentMember.member_id;
+        }
+        return false;
+    };
+
+    const handleOpenEdit = (member: Member) => {
+        setEditMember(member);
+        setEditName(member.name || '');
+        setEditRole(member.role || 'Member');
+        setEditYear(member.year != null ? member.year : null);
+        const rawDivs = (member.division || '')
+            .split(',')
+            .map(d => d.trim())
+            .filter(Boolean);
+        setEditDivision(rawDivs);
+        setEditClearance(member.clearance || 3);
+        setEditError(null);
+        setEditSuccess(false);
+    };
+
+    const handleSaveEdit = async () => {
+        if (!editMember) return;
+        setEditLoading(true);
+        setEditError(null);
+
+        try {
+            const isMentorRole = editRole.toLowerCase() === 'mentor';
+            const normalizedYear = isMentorRole ? null : editYear;
+            const divisionStr = editDivision.join(', ');
+
+            const updates: any = {
+                name: editName.trim(),
+                role: editRole.trim(),
+                division: divisionStr,
+                year: normalizedYear,
+                updated_at: new Date().toISOString()
+            };
+
+            const isPresident = currentMember?.role?.toLowerCase().includes('president') && !currentMember?.role?.toLowerCase().includes('vice');
+            if (superAdmin || isPresident) {
+                updates.clearance = editClearance;
+            }
+
+            const { error } = await supabase
+                .from('members')
+                .update(updates)
+                .eq('member_id', editMember.member_id);
+
+            if (error) throw error;
+
+            // Sync with local state
+            setTeamMembers(prev => prev.map(m => {
+                if (m.member_id === editMember.member_id) {
+                    return {
+                        ...m,
+                        ...updates,
+                        icon: getRoleIcon(updates.role)
+                    };
+                }
+                return m;
+            }));
+
+            setEditSuccess(true);
+            setTimeout(() => {
+                setEditMember(null);
+                setEditSuccess(false);
+            }, 600);
+        } catch (err: any) {
+            console.error('Error saving member edits:', err);
+            setEditError(err.message || 'Failed to save changes');
+        } finally {
+            setEditLoading(false);
+        }
     };
 
     // Filter members by active division tab
@@ -3859,6 +3947,20 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
                                                     Mark as Inactive
                                                 </>
                                             )}
+                                        </button>
+                                    )}
+                                    {/* Edit option for council and super admin */}
+                                    {canEditMember(member) && (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setDetailsOpen(null);
+                                                handleOpenEdit(member);
+                                            }}
+                                            className="w-full flex items-center gap-2 px-4 py-2.5 text-blue-400 hover:bg-blue-500/10 transition-colors text-sm"
+                                        >
+                                            <Edit3 size={14} />
+                                            Edit Member
                                         </button>
                                     )}
                                     {/* Delete option for council */}
@@ -4243,6 +4345,222 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
                                         <>
                                             <Trash2 size={16} />
                                             Remove Member
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Edit Member Modal */}
+            <AnimatePresence>
+                {editMember && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto"
+                        onClick={() => !editLoading && setEditMember(null)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            className="bg-gray-900 border border-white/10 rounded-2xl p-6 max-w-lg w-full shadow-2xl my-8"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="flex items-center justify-between pb-4 mb-4 border-b border-white/10">
+                                <div>
+                                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                        <Edit3 size={18} className="text-blue-400" />
+                                        Edit Member Profile
+                                    </h3>
+                                    <p className="text-xs text-white/50 font-mono mt-0.5">
+                                        {editMember.member_id} • {editMember.email || 'No email registered'}
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => setEditMember(null)}
+                                    disabled={editLoading}
+                                    className="text-white/40 hover:text-white p-1.5 rounded-lg hover:bg-white/5 transition-colors"
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
+
+                            {editError && (
+                                <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center gap-2">
+                                    <AlertCircle size={15} className="shrink-0" />
+                                    <span>{editError}</span>
+                                </div>
+                            )}
+
+                            {editSuccess && (
+                                <div className="mb-4 p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400 text-xs flex items-center gap-2">
+                                    <CheckCircle2 size={15} className="shrink-0" />
+                                    <span>Changes saved successfully!</span>
+                                </div>
+                            )}
+
+                            <div className="space-y-4">
+                                {/* Name */}
+                                <div>
+                                    <label className="block text-xs uppercase tracking-wider text-white/60 mb-1.5 font-medium">
+                                        Full Name
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={editName}
+                                        onChange={(e) => setEditName(e.target.value)}
+                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
+                                        placeholder="Enter member's full name"
+                                    />
+                                </div>
+
+                                {/* Role */}
+                                <div>
+                                    <label className="block text-xs uppercase tracking-wider text-white/60 mb-1.5 font-medium">
+                                        Role / Designation
+                                    </label>
+                                    <div className="flex gap-2 mb-2">
+                                        <select
+                                            value={['Member', 'Senior Member', 'Mentor', 'President', 'Vice President', 'Secretary', 'Treasurer', 'Drone Lead', 'Rocket Lead', 'RC Lead', 'Management Lead', 'PR & Creative Head'].includes(editRole) ? editRole : 'Custom'}
+                                            onChange={(e) => {
+                                                if (e.target.value !== 'Custom') {
+                                                    setEditRole(e.target.value);
+                                                    if (e.target.value === 'Mentor') setEditYear(null);
+                                                }
+                                            }}
+                                            className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
+                                        >
+                                            <option value="Member">Member</option>
+                                            <option value="Senior Member">Senior Member</option>
+                                            <option value="Mentor">Mentor</option>
+                                            <option value="President">President</option>
+                                            <option value="Vice President">Vice President</option>
+                                            <option value="Secretary">Secretary</option>
+                                            <option value="Treasurer">Treasurer</option>
+                                            <option value="Drone Lead">Drone Lead</option>
+                                            <option value="Rocket Lead">Rocket Lead</option>
+                                            <option value="RC Lead">RC Lead</option>
+                                            <option value="Management Lead">Management Lead</option>
+                                            <option value="PR & Creative Head">PR & Creative Head</option>
+                                            <option value="Custom">Custom Role...</option>
+                                        </select>
+                                    </div>
+                                    <input
+                                        type="text"
+                                        value={editRole}
+                                        onChange={(e) => {
+                                            setEditRole(e.target.value);
+                                            if (e.target.value.toLowerCase() === 'mentor') setEditYear(null);
+                                        }}
+                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
+                                        placeholder="Or type custom role title"
+                                    />
+                                </div>
+
+                                {/* Year of Study */}
+                                <div>
+                                    <label className="block text-xs uppercase tracking-wider text-white/60 mb-1.5 font-medium">
+                                        Academic Year
+                                    </label>
+                                    <select
+                                        value={editYear === null ? 'none' : String(editYear)}
+                                        onChange={(e) => setEditYear(e.target.value === 'none' ? null : parseInt(e.target.value))}
+                                        disabled={editRole.toLowerCase() === 'mentor'}
+                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50 disabled:opacity-50"
+                                    >
+                                        <option value="1">1st Year</option>
+                                        <option value="2">2nd Year</option>
+                                        <option value="3">3rd Year</option>
+                                        <option value="4">4th Year</option>
+                                        <option value="none">None / Mentor (-)</option>
+                                    </select>
+                                    {editRole.toLowerCase() === 'mentor' && (
+                                        <p className="text-[11px] text-amber-400/70 mt-1">Mentors do not have a study year assigned (-)</p>
+                                    )}
+                                </div>
+
+                                {/* Team / Divisions */}
+                                <div>
+                                    <label className="block text-xs uppercase tracking-wider text-white/60 mb-1.5 font-medium">
+                                        Team / Technical Divisions
+                                    </label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {['Drone', 'RC Plane', 'Rocketry', 'Management', 'Creative/Web-Dev'].map(divName => {
+                                            const isSelected = editDivision.some(d => d.toLowerCase() === divName.toLowerCase());
+                                            return (
+                                                <button
+                                                    key={divName}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (isSelected) {
+                                                            setEditDivision(prev => prev.filter(d => d.toLowerCase() !== divName.toLowerCase()));
+                                                        } else {
+                                                            setEditDivision(prev => [...prev, divName]);
+                                                        }
+                                                    }}
+                                                    className={`px-3 py-2 rounded-lg text-xs font-medium border text-left flex items-center justify-between transition-all ${
+                                                        isSelected
+                                                            ? 'bg-blue-500/20 border-blue-500/40 text-blue-400'
+                                                            : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10 hover:text-white'
+                                                    }`}
+                                                >
+                                                    <span>{divName}</span>
+                                                    {isSelected && <Check size={14} className="text-blue-400" />}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Clearance Level (President & Super Admin only) */}
+                                {(superAdmin || (currentMember?.role?.toLowerCase().includes('president') && !currentMember?.role?.toLowerCase().includes('vice'))) && (
+                                    <div>
+                                        <label className="block text-xs uppercase tracking-wider text-white/60 mb-1.5 font-medium">
+                                            Clearance Level (President / Admin Only)
+                                        </label>
+                                        <select
+                                            value={editClearance}
+                                            onChange={(e) => setEditClearance(parseInt(e.target.value))}
+                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
+                                        >
+                                            <option value="2">Level 2 (Inductee)</option>
+                                            <option value="3">Level 3 (Regular Member)</option>
+                                            <option value="4">Level 4 (Senior Member / Mentor)</option>
+                                            <option value="5">Level 5 (Executive Council Lead)</option>
+                                        </select>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-white/10">
+                                <button
+                                    type="button"
+                                    onClick={() => setEditMember(null)}
+                                    disabled={editLoading}
+                                    className="px-4 py-2 rounded-lg text-sm text-white/60 hover:text-white hover:bg-white/5 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleSaveEdit}
+                                    disabled={editLoading || !editName.trim()}
+                                    className="px-5 py-2 rounded-lg text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white transition-colors disabled:opacity-50 flex items-center gap-2"
+                                >
+                                    {editLoading ? (
+                                        <>
+                                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                            Saving...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Check size={16} />
+                                            Save Changes
                                         </>
                                     )}
                                 </button>
