@@ -9077,7 +9077,8 @@ const ForcePasswordChangeScreen: React.FC<{
     onPasswordUpdated: (updatedMember: Member) => void;
     onLogout: () => void;
 }> = ({ member, onPasswordUpdated, onLogout }) => {
-    const [currentPassword, setCurrentPassword] = useState('Udaan@2026');
+    const isSuperAdmin = member.member_id === 'UDAAN-000';
+    const [currentPassword, setCurrentPassword] = useState(isSuperAdmin ? 'Admin@2026' : 'Udaan@2026');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -9099,8 +9100,8 @@ const ForcePasswordChangeScreen: React.FC<{
             return;
         }
 
-        if (newPassword === 'Udaan@2026') {
-            setError('Please choose a different password from the temporary default');
+        if (newPassword === 'Udaan@2026' || newPassword === 'Admin@2026') {
+            setError('Please choose a personal password different from the temporary default');
             return;
         }
 
@@ -9151,9 +9152,10 @@ const ForcePasswordChangeScreen: React.FC<{
                     </h2>
                     <p className="text-nation-text text-xs mt-1.5 font-mono">
                         Welcome, <span className="text-white font-bold">{member.name}</span> ({member.member_id})
+                        {member.role && <span className="text-blue-400 ml-1.5">• {member.role}</span>}
                     </p>
                     <p className="text-white/40 text-[11px] mt-1 leading-relaxed">
-                        For your security, please update your temporary password to a private password before proceeding to the dashboard.
+                        For security compliance, all members, administrators, and council leads must update their initial password on first login before accessing the flight deck.
                     </p>
                 </div>
 
@@ -9166,7 +9168,7 @@ const ForcePasswordChangeScreen: React.FC<{
                             type="password"
                             value={currentPassword}
                             onChange={(e) => setCurrentPassword(e.target.value)}
-                            placeholder="Enter current password (e.g. Udaan@2026)"
+                            placeholder={isSuperAdmin ? "Enter current password (e.g. Admin@2026)" : "Enter current password (e.g. Udaan@2026)"}
                             className="w-full px-4 py-2.5 rounded-lg bg-black/50 border border-white/10 text-white font-mono text-sm focus:border-nation-secondary focus:outline-none focus:ring-1 focus:ring-nation-secondary transition-all"
                             required
                         />

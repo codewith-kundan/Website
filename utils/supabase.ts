@@ -360,12 +360,30 @@ export const DIVISION_HEADS: { [key: string]: { name: string; member_id: string 
 export async function loginMember(memberId: string, password: string): Promise<Member | null> {
   const cleanId = memberId.trim().toUpperCase();
   // Fetch member with password for verification (password is excluded from response to client)
-  const { data, error } = await supabase
+  let data: any = null;
+  let error: any = null;
+
+  const primaryQuery = await supabase
     .from('members')
-    .select('member_id, name, email, personal_email, institute_email, role, division, clearance, year, department, status, profile_pic, phone, roll_no, email_verified, password')
+    .select('member_id, name, email, personal_email, institute_email, role, division, clearance, year, department, status, profile_pic, phone, roll_no, email_verified, password, requires_password_change')
     .eq('member_id', cleanId)
     .eq('status', 'approved')
     .single();
+
+  data = primaryQuery.data;
+  error = primaryQuery.error;
+
+  if (error && (error.code === 'PGRST204' || error.message?.includes('requires_password_change'))) {
+    // Column requires_password_change does not exist yet in DB schema cache, fallback gracefully
+    const fallback = await supabase
+      .from('members')
+      .select('member_id, name, email, personal_email, institute_email, role, division, clearance, year, department, status, profile_pic, phone, roll_no, email_verified, password')
+      .eq('member_id', cleanId)
+      .eq('status', 'approved')
+      .single();
+    data = fallback.data;
+    error = fallback.error;
+  }
 
   if (error || !data) {
     return null;
@@ -390,9 +408,12 @@ export async function loginMember(memberId: string, password: string): Promise<M
     const { password: _, ...memberWithoutPassword } = data as any;
     const member = memberWithoutPassword as Member;
 
-    // Detect if password change is required (either via DB flag or because member is using default temporary password)
-    const isDefaultPass = (cleanId !== 'UDAAN-000' && password === 'Udaan@2026');
-    member.requires_password_change = (data as any).requires_password_change === true || isDefaultPass;
+    // Detect if password change is required for ANY member (including Super Admin UDAAN-000 and Executive Council leads):
+    // 1. If explicitly flagged true in the database
+    // 2. Or if using default temporary initial passwords ('Udaan@2026' or 'Admin@2026')
+    const isDefaultPass = (password === 'Udaan@2026' || password === 'Admin@2026');
+    const dbFlag = (data as any).requires_password_change;
+    member.requires_password_change = dbFlag === true || (dbFlag !== false && isDefaultPass);
 
     return member;
   } catch (err) {
@@ -405,12 +426,29 @@ export async function loginMember(memberId: string, password: string): Promise<M
  */
 export async function loginProvisional(memberId: string, password: string): Promise<Member | null> {
   const cleanId = memberId.trim().toUpperCase();
-  const { data, error } = await supabase
+  let data: any = null;
+  let error: any = null;
+
+  const primaryQuery = await supabase
     .from('members')
-    .select('member_id, name, email, personal_email, institute_email, role, division, clearance, year, department, status, profile_pic, phone, roll_no, email_verified, password')
+    .select('member_id, name, email, personal_email, institute_email, role, division, clearance, year, department, status, profile_pic, phone, roll_no, email_verified, password, requires_password_change')
     .eq('member_id', cleanId)
     .eq('status', 'provisional')
     .single();
+
+  data = primaryQuery.data;
+  error = primaryQuery.error;
+
+  if (error && (error.code === 'PGRST204' || error.message?.includes('requires_password_change'))) {
+    const fallback = await supabase
+      .from('members')
+      .select('member_id, name, email, personal_email, institute_email, role, division, clearance, year, department, status, profile_pic, phone, roll_no, email_verified, password')
+      .eq('member_id', cleanId)
+      .eq('status', 'provisional')
+      .single();
+    data = fallback.data;
+    error = fallback.error;
+  }
 
   if (error || !data) return null;
 
@@ -430,8 +468,9 @@ export async function loginProvisional(memberId: string, password: string): Prom
     const { password: _, ...memberWithoutPassword } = data as any;
     const member = memberWithoutPassword as Member;
 
-    const isDefaultPass = (cleanId !== 'UDAAN-000' && password === 'Udaan@2026');
-    member.requires_password_change = (data as any).requires_password_change === true || isDefaultPass;
+    const isDefaultPass = (password === 'Udaan@2026' || password === 'Admin@2026');
+    const dbFlag = (data as any).requires_password_change;
+    member.requires_password_change = dbFlag === true || (dbFlag !== false && isDefaultPass);
 
     return member;
   } catch (err) {
@@ -1938,9 +1977,12 @@ export async function changeMemberPassword(memberId: string, currentPassword: st
     return { success: false, message: 'Verification error. Please try again.' };
   }
 
-  // 2. Prevent same password
+  // 2. Prevent same password or default passwords
   if (trimmedNew === trimmedCurrent) {
     return { success: false, message: 'New password cannot be the same as your current password' };
+  }
+  if (trimmedNew === 'Udaan@2026' || trimmedNew === 'Admin@2026') {
+    return { success: false, message: 'Please choose a personal password different from the temporary default' };
   }
 
   // 3. Hash new password and update
