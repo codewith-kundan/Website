@@ -83,6 +83,7 @@ import { formatName, formatFirstName } from '../utils/formatters';
 
 // Map role to icon
 const getRoleIcon = (role: string): string => {
+    if (role.toLowerCase().includes('mentor')) return 'star';
     if (role.toLowerCase().includes('president') && !role.toLowerCase().includes('vice')) return 'shield';
     if (role.toLowerCase().includes('vice president')) return 'star';
     if (role.toLowerCase().includes('secretary')) return 'scroll';
@@ -3625,27 +3626,23 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
 
     // Get member year from database field
     const getMemberYear = (member: Member): number => {
-        // Use year field from database, default to 2 if not set
+        if (member.role === 'Mentor' || member.year === null || member.year === 0) return 0;
         return member.year || 2;
     };
 
     useEffect(() => {
         const fetchMembers = async () => {
             const members = await getMembers();
-            // Sort by year (descending - 4th year first, then 3rd, then 2nd) then by role importance
+            // Sort by role importance then by year
             const sortedMembers = members
                 .map(m => ({
                     ...m,
                     icon: getRoleIcon(m.role)
                 }))
                 .sort((a, b) => {
-                    // First sort by year (descending)
-                    const yearA = a.year || 2;
-                    const yearB = b.year || 2;
-                    if (yearB !== yearA) return yearB - yearA;
-                    // Then by role hierarchy
                     const roleOrder = (role: string): number => {
                         const r = role.toLowerCase();
+                        if (r.includes('mentor')) return 0;
                         if (r.includes('president') && !r.includes('vice')) return 1;
                         if (r.includes('vice president')) return 2;
                         if (r.includes('secretary')) return 3;
@@ -3653,7 +3650,12 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
                         if (r.includes('lead')) return 5;
                         return 10;
                     };
-                    return roleOrder(a.role) - roleOrder(b.role);
+                    const orderDiff = roleOrder(a.role) - roleOrder(b.role);
+                    if (orderDiff !== 0) return orderDiff;
+                    // Then by year (descending)
+                    const yearA = getMemberYear(a);
+                    const yearB = getMemberYear(b);
+                    return yearB - yearA;
                 });
             setTeamMembers(sortedMembers);
             setLoading(false);
@@ -3676,30 +3678,38 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
         return isCouncil && member.clearance < 5;
     };
 
-    // DEFENSIVE: First filter out any provisional members that might have leaked through
-    // Primary filtering is in getMembers() query - this is a safety net
-    const approvedMembers = teamMembers.filter(m => m.status === undefined || m.status === 'approved');
-
+    // Filter members by active division tab
     const filteredMembers = activeDiv === 'all'
+        ? teamMembers
+        : teamMembers.filter(m => getMemberDivisions(m).includes(activeDiv));
+
+    // Filter approved members by active division (for year sections)
+    // ONLY approved members should ever be shown in active team lists
+    const approvedMembers = teamMembers.filter(m => m.status === undefined || m.status === 'approved');
+    const filteredApprovedMembers = activeDiv === 'all'
         ? approvedMembers
         : approvedMembers.filter(m => getMemberDivisions(m).includes(activeDiv));
 
     // Get clearance label
-    const getClearanceLabel = (clearance: number): string => {
+    const getClearanceLabel = (clearance: number, role?: string): string => {
+        if (role?.toLowerCase() === 'mentor') return 'Mentor';
         switch (clearance) {
             case 5: return 'Council';
             case 4: return '4th Year';
-            case 3: return 'Regular';
+            case 3: return '3rd Year';
+            case 2: return '2nd Year';
             case 1: return '1st Year';
             default: return 'Member';
         }
     };
 
-    const getClearanceColor = (clearance: number): string => {
+    const getClearanceColor = (clearance: number, role?: string): string => {
+        if (role?.toLowerCase() === 'mentor') return 'text-amber-400';
         switch (clearance) {
             case 5: return 'text-purple-400';
             case 4: return 'text-blue-400';
             case 3: return 'text-green-400';
+            case 2: return 'text-teal-400';
             case 1: return 'text-purple-400';
             default: return 'text-white/60';
         }
@@ -3816,7 +3826,7 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
                                             )}
                                             <div className="flex items-center gap-2 text-sm">
                                                 <Shield size={14} className="text-white/40" />
-                                                <span className={getClearanceColor(member.clearance)}>{getClearanceLabel(member.clearance)}</span>
+                                                <span className={getClearanceColor(member.clearance, member.role)}>{getClearanceLabel(member.clearance, member.role)}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -3980,16 +3990,45 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
                 </div>
             )}
 
-            {/* 4th Year Section - Active members only (excludes alumni) */}
-            {activeMembers.filter(m => getMemberYear(m) === 4).length > 0 && (
+            {/* Mentors Section - Active members with role Mentor */}
+            {activeMembers.filter(m => m.role === 'Mentor').length > 0 && (
                 <>
                     <div className="flex items-center gap-4">
+                        <div className="h-px flex-1 bg-gradient-to-r from-amber-500/50 to-transparent"></div>
+                        <span className="text-amber-400 text-sm font-bold uppercase tracking-wider flex items-center gap-2">
+                            <Star size={15} className="text-amber-400 fill-amber-400/20" /> Mentors
+                        </span>
+                        <div className="h-px flex-1 bg-gradient-to-l from-amber-500/50 to-transparent"></div>
+                    </div>
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {activeMembers.filter(m => m.role === 'Mentor').map((member) => (
+                            <MemberCard
+                                key={member.id}
+                                member={member}
+                                borderColor="border-amber-500/30"
+                                gradientFrom="from-amber-500/20"
+                                gradientTo="to-yellow-500/20"
+                                textColor="text-amber-400"
+                                inactiveBorderColor="border-amber-500/10"
+                                inactiveGradientFrom="from-amber-900/20"
+                                inactiveGradientTo="to-yellow-900/20"
+                                inactiveTextColor="text-amber-600/60"
+                            />
+                        ))}
+                    </div>
+                </>
+            )}
+
+            {/* 4th Year Section - Active members only (excludes alumni and mentors) */}
+            {activeMembers.filter(m => getMemberYear(m) === 4 && m.role !== 'Mentor').length > 0 && (
+                <>
+                    <div className="flex items-center gap-4 mt-8">
                         <div className="h-px flex-1 bg-gradient-to-r from-blue-500/50 to-transparent"></div>
                         <span className="text-blue-400 text-sm font-bold uppercase tracking-wider">4th Year</span>
                         <div className="h-px flex-1 bg-gradient-to-l from-blue-500/50 to-transparent"></div>
                     </div>
                     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {activeMembers.filter(m => getMemberYear(m) === 4).map((member) => (
+                        {activeMembers.filter(m => getMemberYear(m) === 4 && m.role !== 'Mentor').map((member) => (
                             <MemberCard
                                 key={member.id}
                                 member={member}
@@ -6083,7 +6122,7 @@ Description: ${newTask.description || "No description provided."}`,
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-white text-sm truncate">{formatName(member.name)}</p>
                                                     <p className="text-white/40 text-xs truncate">
-                                                        {member.member_id} • {member.division} • {member.year === 1 ? '1st' : member.year === 2 ? '2nd' : member.year === 3 ? '3rd' : member.year === 4 ? '4th' : '5th'} Year
+                                                        {member.member_id} • {member.division} • {member.role === 'Mentor' || !member.year ? 'Mentor' : member.year === 1 ? '1st Year' : member.year === 2 ? '2nd Year' : member.year === 3 ? '3rd Year' : member.year === 4 ? '4th Year' : '-'}
                                                     </p>
                                                 </div>
                                             </label>
