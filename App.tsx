@@ -2383,7 +2383,7 @@ const MainContent = () => {
                                             <span className="text-[10px] font-mono uppercase tracking-widest text-emerald-400">Team Roster • Active</span>
                                         </div>
                                         <h4 className="text-white font-display text-sm sm:text-base md:text-lg uppercase tracking-wider font-bold">
-                                            Aeromodelling & Drone Robotics Club
+                                            Aeromodelling and Robotics Club
                                         </h4>
                                         <p className="text-white/60 font-mono text-[10px] sm:text-xs tracking-wider">
                                             National Institute of Technology, Rourkela
@@ -2392,7 +2392,7 @@ const MainContent = () => {
 
                                     {/* Division Pills */}
                                     <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                                        {['Drone', 'RC Plane', 'Rocketry', 'Creative', 'Management'].map((div) => (
+                                        {['Drone', 'RC Plane', 'Rocketry', 'Creative', 'Web Dev', 'Management'].map((div) => (
                                             <span
                                                 key={div}
                                                 className="px-2.5 py-1 text-[9px] sm:text-[10px] font-mono uppercase tracking-wider bg-white/10 hover:bg-white/20 text-white/90 rounded-md border border-white/10 backdrop-blur-md transition-colors"
