@@ -6979,18 +6979,16 @@ const AddMemberTab = ({ currentMember }: { currentMember: Member }) => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (selectedDivisions.length === 0) {
-            setErrorMessage('Please select at least one division');
-            return;
-        }
 
+        // 1. Name is COMPULSORY
         if (!name.trim()) {
             setErrorMessage('Please enter the full name');
             return;
         }
 
-        if (!instituteEmail.trim()) {
-            setErrorMessage('Please provide an email address');
+        // 2. Year of Study / Mentor is COMPULSORY
+        if (!isMentor && (!year || year < 1 || year > 4)) {
+            setErrorMessage('Please select a role or year of study');
             return;
         }
 
@@ -7005,20 +7003,38 @@ const AddMemberTab = ({ currentMember }: { currentMember: Member }) => {
         setErrorMessage('');
 
         try {
-            const divisionString = selectedDivisions.join(', ');
+            // Optional division: defaults to 'General' if none selected
+            const divisionString = selectedDivisions.length > 0 ? selectedDivisions.join(', ') : 'General';
+
+            // Optional email: auto-generate fallback if left empty
+            let finalEmail = instituteEmail.trim();
+            if (!finalEmail) {
+                if (cleanRoll && cleanRoll.length === 9) {
+                    finalEmail = `${cleanRoll.toLowerCase()}@nitrkl.ac.in`;
+                } else {
+                    const cleanName = name.trim().toLowerCase().replace(/[^a-z0-9]/g, '.');
+                    finalEmail = `${cleanName}@udaan.nitrkl.ac.in`;
+                }
+            }
+
+            // Optional password: defaults to 'Udaan@2026' if empty
+            const finalPassword = password.trim() || 'Udaan@2026';
+
+            // Optional department: defaults to detected or 'General'
+            const finalDepartment = department.trim() || 'General';
 
             const result = await addMemberWithYear({
                 name: name.trim(),
-                email: instituteEmail.trim(),
-                password: password.trim(),
+                email: finalEmail,
+                password: finalPassword,
                 role: isMentor ? 'Mentor' : 'Member',
                 division: divisionString,
                 year: isMentor ? 0 : year,
                 added_by: currentMember.member_id,
                 isCouncil: false,
                 roll_no: cleanRoll ? cleanRoll.toUpperCase() : undefined,
-                department: department || 'General',
-                institute_email: instituteEmail.trim()
+                department: finalDepartment,
+                institute_email: finalEmail
             });
 
             if (result.success && result.member) {
@@ -7113,10 +7129,10 @@ const AddMemberTab = ({ currentMember }: { currentMember: Member }) => {
                                 {isMentor ? 'New Mentor Details' : 'New Member Details'}
                             </h2>
 
-                            {/* Role / Year Selection */}
+                            {/* Role / Year Selection - COMPULSORY */}
                             <div>
                                 <label className="block text-white/60 text-xs font-mono uppercase tracking-wider mb-2">
-                                    Role / Year of Study *
+                                    Role / Year of Study * <span className="text-green-400 normal-case">(Compulsory)</span>
                                 </label>
                                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                                     {[1, 2, 3, 4].map((y) => (
@@ -7157,10 +7173,10 @@ const AddMemberTab = ({ currentMember }: { currentMember: Member }) => {
                                 </p>
                             </div>
 
-                            {/* Name */}
+                            {/* Name - COMPULSORY */}
                             <div>
                                 <label className="block text-white/60 text-xs font-mono uppercase tracking-wider mb-2">
-                                    Full Name *
+                                    Full Name * <span className="text-green-400 normal-case">(Compulsory)</span>
                                 </label>
                                 <input
                                     type="text"
@@ -7172,7 +7188,7 @@ const AddMemberTab = ({ currentMember }: { currentMember: Member }) => {
                                 />
                             </div>
 
-                            {/* Roll Number - Non-compulsory */}
+                            {/* Roll Number - OPTIONAL */}
                             <div>
                                 <div className="flex items-center justify-between mb-2">
                                     <label className="block text-white/60 text-xs font-mono uppercase tracking-wider">
@@ -7194,18 +7210,17 @@ const AddMemberTab = ({ currentMember }: { currentMember: Member }) => {
                                 )}
                             </div>
 
-                            {/* Department - Selectable & Auto-detected */}
+                            {/* Department - OPTIONAL */}
                             <div>
                                 <label className="block text-white/60 text-xs font-mono uppercase tracking-wider mb-2">
-                                    Department * {detectedDeptCode && <span className="text-green-400 normal-case">(Auto-selected from Roll No.)</span>}
+                                    Department <span className="text-white/40 normal-case">(Optional)</span> {detectedDeptCode && <span className="text-green-400 normal-case">— Auto-detected from Roll No.</span>}
                                 </label>
                                 <select
                                     value={department}
                                     onChange={(e) => setDepartment(e.target.value)}
                                     className="w-full bg-gray-900 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-green-500/50 transition-all"
-                                    required
                                 >
-                                    <option value="" disabled className="text-white/40">Select Department</option>
+                                    <option value="" className="text-white/40">Select Department (Optional)</option>
                                     {Object.entries(DEPARTMENT_CODES).map(([code, deptName]) => (
                                         <option key={code} value={deptName}>
                                             {deptName} ({code})
@@ -7217,42 +7232,40 @@ const AddMemberTab = ({ currentMember }: { currentMember: Member }) => {
                                 </select>
                             </div>
 
-                            {/* Email / Institute Email */}
+                            {/* Email / Institute Email - OPTIONAL */}
                             <div>
                                 <label className="block text-white/60 text-xs font-mono uppercase tracking-wider mb-2">
-                                    Email Address *
+                                    Email Address <span className="text-white/40 normal-case">(Optional)</span>
                                 </label>
                                 <input
                                     type="email"
                                     value={instituteEmail}
                                     onChange={(e) => setInstituteEmail(e.target.value)}
-                                    placeholder="e.g., student@nitrkl.ac.in or member@gmail.com"
+                                    placeholder="e.g., student@nitrkl.ac.in or member@gmail.com (Optional)"
                                     className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-green-500/50 transition-all font-mono"
-                                    required
                                 />
-                                <p className="text-white/40 text-xs mt-1">Used for login and notifications</p>
+                                <p className="text-white/40 text-xs mt-1">Optional — auto-generated from name or roll number if left empty</p>
                             </div>
 
-                            {/* Password */}
+                            {/* Password - OPTIONAL */}
                             <div>
                                 <label className="block text-white/60 text-xs font-mono uppercase tracking-wider mb-2">
-                                    Initial Password *
+                                    Initial Password <span className="text-white/40 normal-case">(Optional)</span>
                                 </label>
                                 <input
                                     type="text"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    placeholder="Set initial password..."
+                                    placeholder="Leave blank for default (Udaan@2026)"
                                     className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-green-500/50 transition-all font-mono"
-                                    required
                                 />
-                                <p className="text-white/40 text-xs mt-1">This will be the member's login password</p>
+                                <p className="text-white/40 text-xs mt-1">Optional — defaults to <span className="font-mono text-green-400">Udaan@2026</span> if not specified</p>
                             </div>
 
-                            {/* Division - Multiple Selection */}
+                            {/* Division - OPTIONAL */}
                             <div>
                                 <label className="block text-white/60 text-xs font-mono uppercase tracking-wider mb-2">
-                                    Division(s) * <span className="text-white/40 normal-case">(Select one or more)</span>
+                                    Division(s) <span className="text-white/40 normal-case">(Optional — select one or more)</span>
                                 </label>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                     {divisions.map(div => (
@@ -7269,10 +7282,12 @@ const AddMemberTab = ({ currentMember }: { currentMember: Member }) => {
                                         </button>
                                     ))}
                                 </div>
-                                {selectedDivisions.length > 0 && (
+                                {selectedDivisions.length > 0 ? (
                                     <p className="text-green-400/70 text-xs mt-2">
                                         Selected: {selectedDivisions.join(', ')}
                                     </p>
+                                ) : (
+                                    <p className="text-white/40 text-xs mt-1">Optional — defaults to "General" if none selected</p>
                                 )}
                             </div>
 

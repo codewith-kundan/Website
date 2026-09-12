@@ -680,10 +680,10 @@ export async function addMember(member: {
  */
 export async function addMemberWithYear(member: {
   name: string;
-  email: string;
-  password: string;
-  role: string;
-  division: string;
+  email?: string;
+  password?: string;
+  role?: string;
+  division?: string;
   year?: number | null;
   added_by: string;
   isCouncil?: boolean; // Only true for 3rd year council members
@@ -692,37 +692,60 @@ export async function addMemberWithYear(member: {
   institute_email?: string;
   status?: 'approved' | 'pending' | 'provisional' | 'rejected';
 }): Promise<{ success: boolean; member?: Member; error?: string }> {
-  const isMentor = member.role === 'Mentor';
-
-  // Validate year for standard members (1-4 only)
-  if (!isMentor && (!member.year || member.year < 1 || member.year > 4)) {
-    console.error('Invalid year: Only years 1-4 are valid for new members');
-    return { success: false, error: 'Invalid year: Only years 1-4 are valid for regular members' };
-  }
-
-  // Validate required fields
-  if (!member.name || member.name.trim() === '') {
+  // 1. Name is COMPULSORY
+  const cleanName = member.name ? member.name.trim() : '';
+  if (!cleanName) {
     return { success: false, error: 'Name is required' };
   }
-  if (!member.email || member.email.trim() === '') {
-    return { success: false, error: 'Email is required' };
+
+  const role = member.role || 'Member';
+  const isMentor = role === 'Mentor';
+
+  // 2. Year is COMPULSORY (1-4 for members, or 0 for Mentor)
+  if (!isMentor && (!member.year || member.year < 1 || member.year > 4)) {
+    console.error('Invalid year: Only years 1-4 are valid for new members');
+    return { success: false, error: 'Invalid year: Please select year 1, 2, 3, 4, or Mentor' };
   }
-  if (!member.password || member.password.trim() === '') {
-    return { success: false, error: 'Password is required' };
+
+  // All other fields are OPTIONAL with smart defaults:
+  const division = (member.division && member.division.trim()) ? member.division.trim() : 'General';
+  const department = (member.department && member.department.trim()) ? member.department.trim() : 'General';
+
+  // Password: default to Udaan@2026
+  const rawPassword = (member.password && member.password.trim()) ? member.password.trim() : 'Udaan@2026';
+  let hashedPassword = rawPassword;
+  try {
+    if (!rawPassword.startsWith('$2')) {
+      hashedPassword = await bcrypt.hash(rawPassword, 10);
+    }
+  } catch (err) {
+    console.warn('Could not hash password with bcrypt:', err);
   }
-  if (!member.division || member.division.trim() === '') {
-    return { success: false, error: 'At least one division is required' };
+
+  // Email: auto-generate if omitted
+  let finalEmail = (member.email && member.email.trim()) || (member.institute_email && member.institute_email.trim());
+  if (!finalEmail) {
+    if (member.roll_no && member.roll_no.trim()) {
+      finalEmail = `${member.roll_no.trim().toLowerCase()}@nitrkl.ac.in`;
+    } else {
+      const sanitized = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '.');
+      finalEmail = `${sanitized}@udaan.nitrkl.ac.in`;
+    }
   }
 
   // Check if email already exists
   const { data: existingEmail } = await supabase
     .from('members')
     .select('member_id, name')
-    .eq('email', member.email)
+    .eq('email', finalEmail)
     .single();
 
   if (existingEmail) {
-    return { success: false, error: `Email already exists for member ${existingEmail.name} (${existingEmail.member_id})` };
+    if (member.email && member.email.trim() === finalEmail) {
+      return { success: false, error: `Email already exists for member ${existingEmail.name} (${existingEmail.member_id})` };
+    }
+    // Auto-generated fallback conflict resolution
+    finalEmail = `${cleanName.toLowerCase().replace(/[^a-z0-9]/g, '.')}.${Date.now().toString().slice(-4)}@udaan.nitrkl.ac.in`;
   }
 
   // Check if roll number already exists (if provided)
@@ -853,18 +876,18 @@ export async function addMemberWithYear(member: {
       .from('members')
       .insert([{
         member_id: memberId,
-        name: member.name,
-        email: member.email,
-        password: member.password,
-        role: isMentor ? 'Mentor' : member.role,
-        division: member.division,
+        name: cleanName,
+        email: finalEmail,
+        password: hashedPassword,
+        role: isMentor ? 'Mentor' : role,
+        division: division,
         clearance: clearance,
         year: isMentor ? 0 : (member.year || 1),
         status: insertStatus,
         added_by: member.added_by,
-        roll_no: member.roll_no ? member.roll_no.toUpperCase() : null,
-        department: member.department || null,
-        institute_email: member.institute_email || null
+        roll_no: member.roll_no && member.roll_no.trim() ? member.roll_no.trim().toUpperCase() : null,
+        department: department,
+        institute_email: finalEmail
       }])
       .select()
       .single();
