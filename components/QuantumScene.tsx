@@ -12,6 +12,50 @@ import useDeviceTilt from './useDeviceTilt';
 import { useIsMobile, useIsTouch, useIsLowEnd, getMobileThreeSettings } from '../utils/useIsMobile';
 import * as THREE from 'three';
 
+// --- WEBGL ERROR BOUNDARY ---
+interface WebGLBoundaryProps {
+    fallback?: React.ReactNode;
+    children: React.ReactNode;
+}
+
+interface WebGLBoundaryState {
+    hasError: boolean;
+}
+
+export class WebGLCanvasErrorBoundary extends React.Component<WebGLBoundaryProps, WebGLBoundaryState> {
+    constructor(props: WebGLBoundaryProps) {
+        super(props);
+        this.state = { hasError: false };
+    }
+
+    static getDerivedStateFromError() {
+        return { hasError: true };
+    }
+
+    componentDidCatch(error: any) {
+        console.warn('WebGL initialization error safely handled:', error);
+    }
+
+    render() {
+        if (this.state.hasError) {
+            return this.props.fallback || (
+                <div className="w-full h-full flex flex-col items-center justify-center bg-black/40 backdrop-blur-sm p-4 text-center">
+                    <div className="relative w-16 h-16 border border-nation-secondary/40 rounded-full flex items-center justify-center animate-pulse mb-3">
+                        <span className="w-2 h-2 rounded-full bg-nation-secondary"></span>
+                    </div>
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-nation-secondary font-semibold">
+                        Aero System Online
+                    </span>
+                    <span className="text-[8px] font-mono text-white/50 tracking-wider mt-1">
+                        Telemetry & Avionics Nominal
+                    </span>
+                </div>
+            );
+        }
+        return this.props.children;
+    }
+}
+
 // --- LOADING INDICATOR COMPONENT ---
 const DroneLoader = () => {
     const { progress } = useProgress();
@@ -480,7 +524,25 @@ const TacticalFloor = () => {
     )
 }
 
-const RealisticDrone = ({ tilt, isMobile, scale = 0.65 }: { tilt?: any; isMobile?: boolean; scale?: number }) => {
+const triggerHaptic = (pattern: number | number[] = 10) => {
+    if (typeof window !== 'undefined' && typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        try {
+            navigator.vibrate(pattern);
+        } catch { }
+    }
+};
+
+const RealisticDrone = ({ 
+    tilt, 
+    isMobile, 
+    scale = 0.65,
+    touchRotation,
+}: { 
+    tilt?: any; 
+    isMobile?: boolean; 
+    scale?: number;
+    touchRotation?: React.MutableRefObject<{ roll: number; pitch: number; yaw: number; isDragging: boolean }>;
+}) => {
     const { mouse } = useThree();
     const groupRef = useRef<THREE.Group>(null);
     const propellersRef = useRef<THREE.Object3D[]>([]);
@@ -577,21 +639,36 @@ const RealisticDrone = ({ tilt, isMobile, scale = 0.65 }: { tilt?: any; isMobile
             let targetPitch = mouse.y * 0.3;
             let targetYaw = -mouse.x * 0.2;
 
-            // If on mobile and tilt is available & enabled, prefer tilt values
+            // Touch drag rotation
+            if (touchRotation?.current) {
+                const tr = touchRotation.current;
+                targetRoll += tr.roll;
+                targetPitch += tr.pitch;
+                targetYaw += tr.yaw;
+
+                // When user is not dragging, gently decay touch offsets back to level
+                if (!tr.isDragging) {
+                    tr.roll = THREE.MathUtils.lerp(tr.roll, 0, delta * 3);
+                    tr.pitch = THREE.MathUtils.lerp(tr.pitch, 0, delta * 3);
+                    tr.yaw = THREE.MathUtils.lerp(tr.yaw, 0, delta * 1.5);
+                }
+            }
+
+            // If on mobile and tilt is available & enabled, combine tilt values
             if (isMobile && tilt && tilt.enabled) {
                 // tilt.gamma -> left (-) / right (+), tilt.beta -> front/back
                 const gamma = typeof tilt.gamma === 'number' ? tilt.gamma : 0; // [-1,1]
                 const beta = typeof tilt.beta === 'number' ? tilt.beta : 0;   // [-1,1]
 
-                targetRoll = gamma * 0.35;      // roll more responsive
-                targetPitch = beta * 0.25;      // gentle pitch
-                targetYaw = gamma * 0.15;       // small yaw
+                targetRoll += gamma * 0.35;      // roll more responsive
+                targetPitch += beta * 0.25;      // gentle pitch
+                targetYaw += gamma * 0.15;       // small yaw
             }
 
             // Smoothly interpolate rotations
-            groupRef.current.rotation.z = THREE.MathUtils.lerp(groupRef.current.rotation.z, targetRoll, delta * 2);
-            groupRef.current.rotation.x = THREE.MathUtils.lerp(groupRef.current.rotation.x, targetPitch, delta * 2);
-            groupRef.current.rotation.y = THREE.MathUtils.lerp(groupRef.current.rotation.y, targetYaw, delta * 1.5);
+            groupRef.current.rotation.z = THREE.MathUtils.lerp(groupRef.current.rotation.z, targetRoll, delta * 2.5);
+            groupRef.current.rotation.x = THREE.MathUtils.lerp(groupRef.current.rotation.x, targetPitch, delta * 2.5);
+            groupRef.current.rotation.y = THREE.MathUtils.lerp(groupRef.current.rotation.y, targetYaw, delta * 2);
         }
         
         // Spin propellers
@@ -629,6 +706,42 @@ export const HeroScene: React.FC = memo(() => {
     const isMobile = typeof window !== 'undefined' && (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '') || isMobileHook);
     const isSmallScreen = typeof window !== 'undefined' && window.innerWidth < 640;
 
+    // Interactive touch-drag state for drone control
+    const [hasInteracted, setHasInteracted] = useState(false);
+    const touchRotation = useRef({
+        roll: 0,
+        pitch: 0,
+        yaw: 0,
+        startX: 0,
+        startY: 0,
+        isDragging: false,
+    });
+
+    const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+        touchRotation.current.isDragging = true;
+        touchRotation.current.startX = e.clientX;
+        touchRotation.current.startY = e.clientY;
+        if (!hasInteracted) setHasInteracted(true);
+        triggerHaptic(8);
+    };
+
+    const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+        if (!touchRotation.current.isDragging) return;
+        const dx = e.clientX - touchRotation.current.startX;
+        const dy = e.clientY - touchRotation.current.startY;
+        touchRotation.current.startX = e.clientX;
+        touchRotation.current.startY = e.clientY;
+
+        // Yaw and roll from horizontal swipe, pitch from vertical swipe
+        touchRotation.current.yaw -= dx * 0.007;
+        touchRotation.current.roll = THREE.MathUtils.clamp(touchRotation.current.roll - dx * 0.005, -0.6, 0.6);
+        touchRotation.current.pitch = THREE.MathUtils.clamp(touchRotation.current.pitch + dy * 0.005, -0.5, 0.5);
+    };
+
+    const handlePointerUp = () => {
+        touchRotation.current.isDragging = false;
+    };
+
     // Get optimized Three.js settings based on device
     const threeSettings = useMemo(() => getMobileThreeSettings(isLowEnd, isMobile), [isLowEnd, isMobile]);
 
@@ -641,36 +754,40 @@ export const HeroScene: React.FC = memo(() => {
     const droneYPos = isSmallScreen ? 0.7 : 0.9;
     
     // Calculate DPR based on device capabilities
-    const dprRange: [number, number] = isLowEnd 
-        ? [0.5, 0.75] 
-        : isSmallScreen 
-            ? [0.7, 0.9] 
-            : isMobile 
-                ? [0.8, 1] 
-                : [1, 1.5];
+    const dprRange: [number, number] = isSmallScreen 
+        ? [0.9, 1.2] 
+        : isMobile 
+            ? [1, 1.5] 
+            : [1, 2];
     
     // Star count based on device
-    const starCount = isLowEnd ? 300 : isMobile ? 600 : 1000;
+    const starCount = isLowEnd ? 400 : isMobile ? 600 : 1000;
     
     // Sparkle count based on device
-    const sparkleCount = isLowEnd ? 15 : isMobile ? 30 : 50;
+    const sparkleCount = isLowEnd ? 20 : isMobile ? 30 : 50;
 
     return (
-        <div className="absolute inset-0 z-0 touch-none">
+        <div 
+            className="absolute inset-0 z-0 touch-none select-none cursor-grab active:cursor-grabbing"
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+        >
+          <WebGLCanvasErrorBoundary>
             <Canvas
                 dpr={dprRange}
                 gl={{ 
-                    powerPreference: isLowEnd ? 'low-power' : 'high-performance', 
-                    antialias: !isMobile && !isLowEnd, 
+                    powerPreference: 'default', 
+                    antialias: !isMobile, 
                     stencil: false, 
                     depth: true,
-                    // Reduce precision on mobile to improve performance
-                    precision: isMobile ? 'mediump' : 'highp',
+                    precision: 'highp',
+                    failIfMajorPerformanceCaveat: false,
                 }}
-                performance={{ min: isLowEnd ? 0.3 : 0.5 }}
+                performance={{ min: 0.5 }}
                 style={{ touchAction: 'none' }}
-                // Limit frame rate on low-end devices
-                frameloop={isLowEnd ? 'demand' : 'always'}
+                frameloop="always"
             >
                 <AdaptiveDpr pixelated />
                 <AdaptiveEvents />
@@ -694,16 +811,27 @@ export const HeroScene: React.FC = memo(() => {
                 {/* Shooting Stars Effect - reduced on mobile */}
                 {!isLowEnd && <ShootingStars isMobile={isMobile} />}
         
-                {/* Interactive Realistic Drone */}
+                {/* Interactive Realistic Drone with touch rotation */}
                 <Suspense fallback={<DroneLoader />}>
                     <group position={[0, droneYPos, 0]}>
-                        <RealisticDrone tilt={tilt} isMobile={isMobile} scale={droneScale} />
+                        <RealisticDrone tilt={tilt} isMobile={isMobile} scale={droneScale} touchRotation={touchRotation} />
                     </group>
                 </Suspense>
 
                 {/* Particles simulating cruising speed - reduced on mobile */}
                 <Sparkles count={sparkleCount} scale={20} size={2} speed={1} opacity={0.3} color="#ffffff" position={[0, 0, -5]} />
             </Canvas>
+          </WebGLCanvasErrorBoundary>
+
+            {/* Mobile Touch Guidance Badge */}
+            {isMobile && !hasInteracted && (
+                <div className="absolute left-1/2 -translate-x-1/2 bottom-24 sm:bottom-28 z-20 pointer-events-none transition-opacity duration-700 animate-pulse">
+                    <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/75 border border-nation-secondary/50 backdrop-blur-md text-[9px] font-mono text-nation-secondary uppercase tracking-widest shadow-[0_0_15px_rgba(0,240,255,0.3)]">
+                        <span className="w-1.5 h-1.5 bg-nation-secondary rounded-full animate-ping"></span>
+                        <span>Touch & Drag to Steer Drone</span>
+                    </div>
+                </div>
+            )}
 
             {/* Tilt permission prompt for iOS if required - improved touch target */}
             {isMobile && tilt.permissionRequired && !tilt.enabled && (
@@ -732,24 +860,26 @@ export const HangarScene: React.FC = memo(() => {
   
   // Reduced counts for mobile
   const sparkleCount = isLowEnd ? 5 : isMobile ? 10 : 20;
-  const starCount = isLowEnd ? 100 : isMobile ? 200 : 300;
-  const dprRange: [number, number] = isLowEnd ? [0.5, 0.75] : isMobile ? [0.8, 1] : [1, 1.5];
+  const starCount = isLowEnd ? 150 : isMobile ? 250 : 300;
+  const dprRange: [number, number] = isMobile ? [1, 1.5] : [1, 2];
   
   return (
     <div className="w-full h-full absolute inset-0 bg-nation-black">
-      <Canvas
-        camera={{ position: [5, 3, 6], fov: isMobile ? 45 : 40 }}
-        dpr={dprRange}
-        gl={{ 
-            powerPreference: isLowEnd ? 'low-power' : 'high-performance', 
-            antialias: !isMobile, 
-            stencil: false, 
-            depth: true,
-            precision: isMobile ? 'mediump' : 'highp',
-        }}
-        performance={{ min: isLowEnd ? 0.3 : 0.5 }}
-        frameloop={isLowEnd ? 'demand' : 'always'}
-      >
+      <WebGLCanvasErrorBoundary>
+        <Canvas
+          camera={{ position: [5, 3, 6], fov: isMobile ? 45 : 40 }}
+          dpr={dprRange}
+          gl={{ 
+              powerPreference: 'default', 
+              antialias: !isMobile, 
+              stencil: false, 
+              depth: true, 
+              precision: 'highp',
+              failIfMajorPerformanceCaveat: false,
+          }}
+          performance={{ min: 0.5 }}
+          frameloop="always"
+        >
         <AdaptiveDpr pixelated />
         <AdaptiveEvents />
         <fog attach="fog" args={['#020204', 5, isLowEnd ? 25 : 35]} />
@@ -773,12 +903,19 @@ export const HangarScene: React.FC = memo(() => {
         <Sparkles count={sparkleCount} scale={10} size={4} speed={0.3} opacity={0.3} color="#ffffff" />
         <Stars radius={100} depth={50} count={starCount} factor={3} saturation={0} fade speed={0.2} />
       </Canvas>
+      </WebGLCanvasErrorBoundary>
     </div>
   );
 })
 
 // --- RC PLANE MODEL (loaded from public folder) ---
-const RCPlaneModel = ({ scale = 1 }: { scale?: number }) => {
+const RCPlaneModel = ({ 
+    scale = 1,
+    dragRotation,
+}: { 
+    scale?: number;
+    dragRotation?: React.MutableRefObject<{ x: number; y: number; vx: number; vy: number; isDragging: boolean }>;
+}) => {
     const groupRef = useRef<THREE.Group>(null);
     const { scene } = useGLTF('/RC.glb');
 
@@ -805,12 +942,27 @@ const RCPlaneModel = ({ scale = 1 }: { scale?: number }) => {
         return clone;
     }, [scene]);
 
-    // Gentle floating animation
-    useFrame((state) => {
+    // Interactive inertia 360-degree rotation & gentle hovering
+    useFrame((state, delta) => {
         if (groupRef.current) {
-            groupRef.current.rotation.y = state.clock.elapsedTime * 0.12;
-            groupRef.current.position.y = Math.sin(state.clock.elapsedTime * 0.5) * 0.1;
-            groupRef.current.rotation.z = Math.sin(state.clock.elapsedTime * 0.3) * 0.015;
+            if (dragRotation?.current) {
+                const dr = dragRotation.current;
+                if (!dr.isDragging) {
+                    // Apply smooth momentum damping
+                    dr.y += dr.vx;
+                    dr.x += dr.vy;
+                    dr.vx = THREE.MathUtils.lerp(dr.vx, 0, delta * 3);
+                    dr.vy = THREE.MathUtils.lerp(dr.vy, 0, delta * 3);
+                    // Gentle ambient auto-rotation when idle
+                    dr.y += delta * 0.15;
+                }
+                groupRef.current.rotation.y = dr.y;
+                groupRef.current.rotation.x = dr.x;
+            } else {
+                groupRef.current.rotation.y = state.clock.elapsedTime * 0.12;
+            }
+            groupRef.current.position.y = Math.sin(state.clock.elapsedTime * 0.5) * 0.08;
+            groupRef.current.rotation.z = Math.sin(state.clock.elapsedTime * 0.3) * 0.02;
         }
     });
 
@@ -824,33 +976,86 @@ const RCPlaneModel = ({ scale = 1 }: { scale?: number }) => {
 // Preload the RC plane model
 useGLTF.preload('/RC.glb');
 
-// --- RC PLANE SCENE (keeps export name for compatibility, with mobile optimization) ---
+// --- RC PLANE SCENE (with interactive 360 touch/drag inspection) ---
 export const CombatJetScene: React.FC = memo(() => {
   const isMobile = useIsMobile();
   const isLowEnd = useIsLowEnd();
+  const [hasInteracted, setHasInteracted] = useState(false);
+
+  const dragRotation = useRef({
+      x: 0.15,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      startX: 0,
+      startY: 0,
+      isDragging: false,
+  });
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+      dragRotation.current.isDragging = true;
+      dragRotation.current.startX = e.clientX;
+      dragRotation.current.startY = e.clientY;
+      dragRotation.current.vx = 0;
+      dragRotation.current.vy = 0;
+      if (!hasInteracted) setHasInteracted(true);
+      triggerHaptic(8);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!dragRotation.current.isDragging) return;
+      const dx = e.clientX - dragRotation.current.startX;
+      const dy = e.clientY - dragRotation.current.startY;
+      dragRotation.current.startX = e.clientX;
+      dragRotation.current.startY = e.clientY;
+
+      dragRotation.current.y += dx * 0.009;
+      dragRotation.current.x = THREE.MathUtils.clamp(dragRotation.current.x + dy * 0.007, -0.6, 0.6);
+      dragRotation.current.vx = dx * 0.006;
+      dragRotation.current.vy = dy * 0.005;
+  };
+
+  const handlePointerUp = () => {
+      dragRotation.current.isDragging = false;
+  };
+
+  const handleReset = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      dragRotation.current.x = 0.15;
+      dragRotation.current.y = 0;
+      dragRotation.current.vx = 0;
+      dragRotation.current.vy = 0;
+      triggerHaptic([6, 12]);
+  };
   
   // Reduced sparkle count for mobile
   const sparkleCount = isLowEnd ? 10 : isMobile ? 20 : 40;
-  const dprRange: [number, number] = isLowEnd ? [0.5, 0.75] : isMobile ? [0.8, 1] : [1, 1.5];
+  const dprRange: [number, number] = isMobile ? [1, 1.5] : [1, 2];
   
   return (
-    <div className="w-full h-full absolute inset-0 bg-transparent">
-      <Canvas
-        camera={{ position: [0, 0.5, isMobile ? 9 : 8], fov: isMobile ? 50 : 45 }}
-        dpr={dprRange}
-        gl={{ 
-            powerPreference: isLowEnd ? 'low-power' : 'high-performance', 
-            antialias: !isMobile && !isLowEnd, 
-            stencil: false, 
-            depth: true, 
-            alpha: true,
-            precision: isMobile ? 'mediump' : 'highp',
-        }}
-        performance={{ min: isLowEnd ? 0.3 : 0.5 }}
-        frameloop={isLowEnd ? 'demand' : 'always'}
-      >
-        {/* Transparent background to match section */}
-        
+    <div 
+        className="w-full h-full absolute inset-0 bg-transparent cursor-grab active:cursor-grabbing touch-none select-none"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+    >
+      <WebGLCanvasErrorBoundary>
+        <Canvas
+          camera={{ position: [0, 0.5, isMobile ? 9 : 8], fov: isMobile ? 50 : 45 }}
+          dpr={dprRange}
+          gl={{ 
+              powerPreference: 'default', 
+              antialias: !isMobile, 
+              stencil: false, 
+              depth: true, 
+              alpha: true,
+              precision: 'highp',
+              failIfMajorPerformanceCaveat: false,
+          }}
+          performance={{ min: 0.5 }}
+          frameloop="always"
+        >
         {/* Realistic lighting setup - simplified on mobile */}
         <ambientLight intensity={isMobile ? 0.8 : 0.6} />
         <directionalLight position={[5, 8, 5]} intensity={2} color="#ffffff" />
@@ -863,15 +1068,30 @@ export const CombatJetScene: React.FC = memo(() => {
         )}
 
         <Suspense fallback={<DroneLoader />}>
-          <Float rotationIntensity={0.1} floatIntensity={0.2} speed={1.5}>
+          <Float rotationIntensity={0.05} floatIntensity={0.15} speed={1.2}>
             <group position={[0, -0.3, 0]}> 
-              <RCPlaneModel scale={isMobile ? 0.05 : 0.055} />
+              <RCPlaneModel scale={isMobile ? 0.05 : 0.055} dragRotation={dragRotation} />
             </group>
           </Float>
         </Suspense>
 
         <Sparkles count={sparkleCount} scale={18} size={1.5} speed={0.2} opacity={0.15} color="#ffffff" />
       </Canvas>
+      </WebGLCanvasErrorBoundary>
+
+      {/* Interactive 360 Inspection HUD Badge */}
+      <div className="absolute bottom-3 left-3 z-10 flex items-center gap-2 px-2.5 py-1 rounded bg-black/70 border border-white/10 backdrop-blur-sm text-[8px] font-mono text-nation-secondary uppercase tracking-widest shadow-lg">
+          <span className="w-1.5 h-1.5 rounded-full bg-nation-secondary animate-ping"></span>
+          <span>{hasInteracted ? '360° Inspection Active' : 'Touch & Drag to Rotate'}</span>
+          {hasInteracted && (
+              <button 
+                  onClick={handleReset}
+                  className="ml-1 text-[7px] text-white/60 hover:text-white uppercase tracking-wider underline active:scale-95"
+              >
+                  Reset
+              </button>
+          )}
+      </div>
     </div>
   );
 })

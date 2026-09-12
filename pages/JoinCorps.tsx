@@ -501,7 +501,7 @@ const JoinCorpsPage = () => {
                                                 type="button"
                                                 onClick={handleSendVerificationCode}
                                                 disabled={isSendingCode || !formData.email}
-                                                className="w-full sm:w-auto px-4 py-2.5 sm:py-3 bg-nation-secondary/20 border border-nation-secondary/50 rounded text-nation-secondary hover:bg-nation-secondary/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm whitespace-nowrap"
+                                                className="w-full sm:w-auto px-4 py-2.5 sm:py-3 bg-nation-secondary/20 border border-nation-secondary/50 rounded text-nation-secondary hover:bg-nation-secondary/30 transition-all disabled:opacity-50 flex items-center justify-center gap-2 text-sm whitespace-nowrap"
                                             >
                                                 {isSendingCode ? (
                                                     <>
@@ -557,7 +557,7 @@ const JoinCorpsPage = () => {
                                                     type="button"
                                                     onClick={handleVerifyCode}
                                                     disabled={isVerifyingCode || verificationCode.length !== 6}
-                                                    className="w-full sm:w-auto px-4 py-2.5 sm:py-2 bg-green-500/20 border border-green-500/50 rounded text-green-400 hover:bg-green-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
+                                                    className="w-full sm:w-auto px-4 py-2.5 sm:py-2 bg-green-500/20 border border-green-500/50 rounded text-green-400 hover:bg-green-500/30 transition-all disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
                                                 >
                                                     <CheckCircle size={16} />
                                                     Confirm
@@ -783,7 +783,7 @@ const JoinCorpsPage = () => {
                             <button
                                 type="submit"
                                 disabled={isSubmitting || formData.interests.length === 0 || !configLoaded || years.length === 0 || !emailVerified}
-                                className="group px-6 sm:px-12 py-3 sm:py-5 bg-nation-secondary text-white font-display font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] text-xs sm:text-sm hover:bg-white hover:text-black transition-all duration-300 clip-path-slant shadow-[0_0_30px_rgba(59,130,246,0.4)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 sm:gap-3"
+                                className="group px-6 sm:px-12 py-3 sm:py-5 bg-nation-secondary text-white font-display font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] text-xs sm:text-sm hover:bg-white hover:text-black transition-all duration-300 clip-path-slant shadow-[0_0_30px_rgba(59,130,246,0.4)] disabled:opacity-50 flex items-center gap-2 sm:gap-3"
                             >
                                 {isSubmitting ? (
                                     <>

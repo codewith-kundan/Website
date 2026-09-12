@@ -343,139 +343,160 @@ export interface DivisionRequest {
 
 // Division heads mapping
 export const DIVISION_HEADS: { [key: string]: { name: string; member_id: string } } = {
-  'Creative/Web-Dev': { name: 'Nirav', member_id: 'UDAAN-003' },
-  'Management': { name: 'Deepa', member_id: 'UDAAN-004' },
-  'RC Plane': { name: 'M Sai', member_id: 'UDAAN-006' },
-  'Rocketry': { name: 'Amrit', member_id: 'UDAAN-007' },
-  'Drone': { name: 'Tanya', member_id: 'UDAAN-005' },
+  'Drone': { name: 'Ayusman Behera', member_id: 'UDAAN-2009' },
+  'RC Plane': { name: 'Mithun Bharath', member_id: 'UDAAN-2004' },
+  'Rocketry': { name: 'Shubham Shekhar Sahoo', member_id: 'UDAAN-2022' },
+  'Management': { name: 'Rahul Kumhar', member_id: 'UDAAN-2017' },
+  'Creative': { name: 'Dilesh Dibyaranjan Patra', member_id: 'UDAAN-2019' },
+  'Creative/Web-Dev': { name: 'Dilesh Dibyaranjan Patra', member_id: 'UDAAN-2019' },
+  'Web Dev': { name: 'Dilesh Dibyaranjan Patra', member_id: 'UDAAN-2019' },
 };
 
 // Helper functions
 
 /**
- * Authenticate a member by member_id and password
- * Uses client-side bcrypt verification (bcryptjs) since PostgreSQL crypt() 
- * doesn't support bcryptjs-generated hashes properly
+ * Helper to find candidate members by identifier (Member ID, Name, Email, or Roll No)
  */
-export async function loginMember(memberId: string, password: string): Promise<Member | null> {
-  const cleanId = memberId.trim().toUpperCase();
-  // Fetch member with password for verification (password is excluded from response to client)
-  let data: any = null;
-  let error: any = null;
+async function findMemberCandidates(identifier: string, status: 'approved' | 'provisional'): Promise<any[]> {
+  const clean = (identifier || '').trim().replace(/\s+/g, ' ');
+  if (!clean) return [];
 
-  const primaryQuery = await supabase
-    .from('members')
-    .select('member_id, name, email, personal_email, institute_email, role, division, clearance, year, department, status, profile_pic, phone, roll_no, email_verified, password, requires_password_change')
-    .eq('member_id', cleanId)
-    .eq('status', 'approved')
-    .single();
+  const SELECT_COLS = 'member_id, name, email, personal_email, institute_email, role, division, clearance, year, department, status, profile_pic, phone, roll_no, email_verified, password';
 
-  data = primaryQuery.data;
-  error = primaryQuery.error;
-
-  if (error && (error.code === 'PGRST204' || error.message?.includes('requires_password_change'))) {
-    // Column requires_password_change does not exist yet in DB schema cache, fallback gracefully
-    const fallback = await supabase
+  // 1. Email format (contains @)
+  if (clean.includes('@')) {
+    const { data } = await supabase
       .from('members')
-      .select('member_id, name, email, personal_email, institute_email, role, division, clearance, year, department, status, profile_pic, phone, roll_no, email_verified, password')
-      .eq('member_id', cleanId)
-      .eq('status', 'approved')
-      .single();
-    data = fallback.data;
-    error = fallback.error;
+      .select(SELECT_COLS)
+      .eq('status', status)
+      .or(`email.ilike.${clean},institute_email.ilike.${clean},personal_email.ilike.${clean}`);
+    if (data && data.length > 0) return data;
   }
 
-  if (error || !data) {
-    return null;
+  // 2. Starts with UDAAN- (case-insensitive)
+  if (/^udaan-/i.test(clean)) {
+    const { data } = await supabase
+      .from('members')
+      .select(SELECT_COLS)
+      .eq('status', status)
+      .ilike('member_id', clean);
+    if (data && data.length > 0) return data;
   }
 
-  const storedPass = (data as any).password || '';
-
-  try {
-    let isValid = false;
-
-    // Verify password with bcrypt
-    if (storedPass.startsWith('$2')) {
-      isValid = await bcrypt.compare(password, storedPass);
-    } else {
-      // Plain text fallback (legacy)
-      isValid = (password === storedPass);
-    }
-
-    if (!isValid) return null;
-
-    // Return member WITHOUT password
-    const { password: _, ...memberWithoutPassword } = data as any;
-    const member = memberWithoutPassword as Member;
-
-    // Detect if password change is required for ANY member (including Super Admin UDAAN-000 and Executive Council leads):
-    // 1. If explicitly flagged true in the database
-    // 2. Or if using default temporary initial passwords ('Udaan@2026' or 'Admin@2026')
-    const isDefaultPass = (password === 'Udaan@2026' || password === 'SuperAdmin@2026' || password === 'Admin@2026');
-    const dbFlag = (data as any).requires_password_change;
-    member.requires_password_change = dbFlag === true || (dbFlag !== false && isDefaultPass);
-
-    return member;
-  } catch (err) {
-    return null;
+  // 3. Digits only (e.g. "1121" or "001" or roll number)
+  if (/^\d+$/.test(clean)) {
+    const idVariants = [`UDAAN-${clean}`, `UDAAN-${clean.padStart(3, '0')}`];
+    const { data } = await supabase
+      .from('members')
+      .select(SELECT_COLS)
+      .eq('status', status)
+      .or(`member_id.ilike.${idVariants[0]},member_id.ilike.${idVariants[1]},roll_no.ilike.${clean}`);
+    if (data && data.length > 0) return data;
   }
+
+  // 4. Exact name (case-insensitive) or prefix (handles trailing spaces in DB)
+  const { data: nameData } = await supabase
+    .from('members')
+    .select(SELECT_COLS)
+    .eq('status', status)
+    .ilike('name', `${clean}%`);
+  if (nameData && nameData.length > 0) return nameData;
+
+  // 5. Broad fallback: member_id, name, or roll_no
+  const safeClean = clean.replace(/[,()]/g, '');
+  if (safeClean.length >= 2) {
+    const { data: fallbackData } = await supabase
+      .from('members')
+      .select(SELECT_COLS)
+      .eq('status', status)
+      .or(`member_id.ilike.%${safeClean}%,name.ilike.%${safeClean}%,roll_no.ilike.%${safeClean}%`);
+    if (fallbackData && fallbackData.length > 0) return fallbackData;
+  }
+
+  return [];
 }
 
 /**
- * Authenticate a provisional member (Stage 2) — members with status 'provisional'
+ * Authenticate a member by member ID, Name, Email, or Roll No and password.
+ * Uses client-side bcrypt verification (bcryptjs).
  */
-export async function loginProvisional(memberId: string, password: string): Promise<Member | null> {
-  const cleanId = memberId.trim().toUpperCase();
-  let data: any = null;
-  let error: any = null;
-
-  const primaryQuery = await supabase
-    .from('members')
-    .select('member_id, name, email, personal_email, institute_email, role, division, clearance, year, department, status, profile_pic, phone, roll_no, email_verified, password, requires_password_change')
-    .eq('member_id', cleanId)
-    .eq('status', 'provisional')
-    .single();
-
-  data = primaryQuery.data;
-  error = primaryQuery.error;
-
-  if (error && (error.code === 'PGRST204' || error.message?.includes('requires_password_change'))) {
-    const fallback = await supabase
-      .from('members')
-      .select('member_id, name, email, personal_email, institute_email, role, division, clearance, year, department, status, profile_pic, phone, roll_no, email_verified, password')
-      .eq('member_id', cleanId)
-      .eq('status', 'provisional')
-      .single();
-    data = fallback.data;
-    error = fallback.error;
-  }
-
-  if (error || !data) return null;
-
-  const storedPass = (data as any).password || '';
-
-  try {
-    let isValid = false;
-
-    if (storedPass.startsWith('$2')) {
-      isValid = await bcrypt.compare(password, storedPass);
-    } else {
-      isValid = (password === storedPass);
-    }
-
-    if (!isValid) return null;
-
-    const { password: _, ...memberWithoutPassword } = data as any;
-    const member = memberWithoutPassword as Member;
-
-    const isDefaultPass = (password === 'Udaan@2026' || password === 'SuperAdmin@2026' || password === 'Admin@2026');
-    const dbFlag = (data as any).requires_password_change;
-    member.requires_password_change = dbFlag === true || (dbFlag !== false && isDefaultPass);
-
-    return member;
-  } catch (err) {
+export async function loginMember(memberIdOrName: string, password: string): Promise<Member | null> {
+  const candidates = await findMemberCandidates(memberIdOrName, 'approved');
+  if (!candidates || candidates.length === 0) {
     return null;
   }
+
+  for (const data of candidates) {
+    const storedPass = (data as any).password || '';
+
+    try {
+      let isValid = false;
+
+      // Verify password with bcrypt
+      if (storedPass.startsWith('$2')) {
+        isValid = await bcrypt.compare(password, storedPass);
+      } else {
+        // Plain text fallback (legacy)
+        isValid = (password === storedPass);
+      }
+
+      if (isValid) {
+        // Return member WITHOUT password
+        const { password: _, ...memberWithoutPassword } = data as any;
+        const member = memberWithoutPassword as Member;
+
+        // Detect if password change is required for ANY member:
+        const isDefaultPass = (password === 'Udaan@2026' || password === 'SuperAdmin@2026' || password === 'Admin@2026');
+        const dbFlag = (data as any).requires_password_change;
+        member.requires_password_change = dbFlag === true || (dbFlag !== false && isDefaultPass);
+
+        return member;
+      }
+    } catch (err) {
+      // Continue to next candidate if verification error
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Authenticate a provisional member (Stage 2) by member ID, Name, or Email and password.
+ */
+export async function loginProvisional(memberIdOrName: string, password: string): Promise<Member | null> {
+  const candidates = await findMemberCandidates(memberIdOrName, 'provisional');
+  if (!candidates || candidates.length === 0) {
+    return null;
+  }
+
+  for (const data of candidates) {
+    const storedPass = (data as any).password || '';
+
+    try {
+      let isValid = false;
+
+      if (storedPass.startsWith('$2')) {
+        isValid = await bcrypt.compare(password, storedPass);
+      } else {
+        isValid = (password === storedPass);
+      }
+
+      if (isValid) {
+        const { password: _, ...memberWithoutPassword } = data as any;
+        const member = memberWithoutPassword as Member;
+
+        const isDefaultPass = (password === 'Udaan@2026' || password === 'SuperAdmin@2026' || password === 'Admin@2026');
+        const dbFlag = (data as any).requires_password_change;
+        member.requires_password_change = dbFlag === true || (dbFlag !== false && isDefaultPass);
+
+        return member;
+      }
+    } catch (err) {
+      // Continue to next candidate
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -512,8 +533,6 @@ export async function getActiveMembers(): Promise<Member[]> {
     .select('member_id, name, role, division, year, department, profile_pic, clearance, phone, personal_email, roll_no, status, is_inactive, inactive_since')
     .eq('status', 'approved') // CRITICAL: Only approved members - excludes provisional/pending/rejected
     .neq('member_id', 'UDAAN-000')
-    .neq('role', 'Alumni')
-    .neq('year', 0)
     .order('member_id', { ascending: true });
 
   if (error) {
@@ -546,33 +565,17 @@ export async function getCouncilMembers(): Promise<Member[]> {
 }
 
 /**
- * Get alumni members only
- * NOTE: UDAAN-000 is never included here
- * NOTE: Only returns members with status = 'approved' - provisional members are excluded
- * SECURITY: Only fetches non-sensitive fields
+ * Get alumni members - DEPRECATED (Alumni features removed)
  */
 export async function getAlumniMembers(): Promise<Member[]> {
-  const { data, error } = await supabase
-    .from('members')  // Use members table to get contact info
-    .select('member_id, name, role, division, year, department, profile_pic, clearance, phone, personal_email, roll_no, status')
-    .eq('status', 'approved') // CRITICAL: Only approved members - excludes provisional/pending/rejected
-    .eq('role', 'Alumni')
-    .neq('member_id', 'UDAAN-000')
-    .order('member_id', { ascending: true });
-
-  if (error) {
-    return [];
-  }
-
-  return data as Member[];
+  return [];
 }
 
 /**
- * Get members assignable for tasks (excludes alumni, 4th years, and super admin)
+ * Get members assignable for tasks (excludes 4th years, mentors, and super admin)
  * This is used when council/4th year assigns tasks to others
  * NOTE: UDAAN-000 cannot be assigned tasks - it's a system admin
- * NOTE: 4th year members cannot be assigned tasks (they are task assigners)
- * NOTE: Alumni cannot be assigned tasks (inactive members)
+ * NOTE: 4th year members and Mentors cannot be assigned tasks (they are task assigners/advisors)
  * SECURITY: Only fetches non-sensitive fields needed for task assignment
  */
 export async function getAssignableMembers(): Promise<Member[]> {
@@ -580,8 +583,7 @@ export async function getAssignableMembers(): Promise<Member[]> {
     .from('public_team_members')  // Use secure view
     .select('member_id, name, role, division, year, department, profile_pic, clearance')
     .neq('member_id', 'UDAAN-000')
-    .neq('role', 'Alumni')
-    .neq('year', 0)
+    .neq('role', 'Mentor')
     .neq('year', 4)
     .order('member_id', { ascending: true });
 
@@ -682,7 +684,7 @@ export async function addMemberWithYear(member: {
   password: string;
   role: string;
   division: string;
-  year: number;
+  year?: number | null;
   added_by: string;
   isCouncil?: boolean; // Only true for 3rd year council members
   roll_no?: string;
@@ -690,10 +692,12 @@ export async function addMemberWithYear(member: {
   institute_email?: string;
   status?: 'approved' | 'pending' | 'provisional' | 'rejected';
 }): Promise<{ success: boolean; member?: Member; error?: string }> {
-  // Validate year (1-4 only, 5th year removed - becomes Alumni)
-  if (member.year < 1 || member.year > 4) {
+  const isMentor = member.role === 'Mentor';
+
+  // Validate year for standard members (1-4 only)
+  if (!isMentor && (!member.year || member.year < 1 || member.year > 4)) {
     console.error('Invalid year: Only years 1-4 are valid for new members');
-    return { success: false, error: 'Invalid year: Only years 1-4 are valid for new members' };
+    return { success: false, error: 'Invalid year: Only years 1-4 are valid for regular members' };
   }
 
   // Validate required fields
@@ -722,7 +726,7 @@ export async function addMemberWithYear(member: {
   }
 
   // Check if roll number already exists (if provided)
-  if (member.roll_no) {
+  if (member.roll_no && member.roll_no.trim() !== '') {
     const { data: existingRollNo } = await supabase
       .from('members')
       .select('member_id, name')
@@ -734,22 +738,50 @@ export async function addMemberWithYear(member: {
     }
   }
 
-  // Determine clearance based on council status
-  const clearance = member.isCouncil ? 5 : 3;
+  // Determine clearance based on role and council status
+  // Mentors get Level 4 (Senior Member / Mentor)
+  // Council members get Level 5
+  // Regular members get Level 3
+  const clearance = isMentor ? 4 : (member.isCouncil ? 5 : 3);
 
-  // Get the ID prefix based on year and council status
-  // Council members (3rd year with isCouncil=true): UDAAN-XXX
-  // Non-council members: UDAAN-{year}XXX (e.g., UDAAN-1001, UDAAN-2001, UDAAN-3001, UDAAN-4001)
-  const isCouncilMember = member.isCouncil && member.year === 3;
+  // Get the ID prefix based on role, year, and council status
+  const isCouncilMember = !isMentor && member.isCouncil && member.year === 3;
 
-  // FIX: Retry logic for ID collision (up to 5 attempts)
+  // Retry logic for ID collision (up to 5 attempts)
   const maxRetries = 5;
   let lastError: any = null;
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     let memberId: string;
 
-    if (isCouncilMember) {
+    if (isMentor) {
+      // Mentors use UDAAN-MXXX format (e.g. UDAAN-M001)
+      const { data: existingMentors, error: fetchMentorError } = await supabase
+        .from('members')
+        .select('member_id')
+        .like('member_id', 'UDAAN-M%')
+        .order('member_id', { ascending: false });
+
+      if (fetchMentorError) {
+        console.error('Error fetching mentors:', fetchMentorError);
+        lastError = fetchMentorError;
+        continue;
+      }
+
+      let nextNum = 1;
+      if (existingMentors && existingMentors.length > 0) {
+        const numbers = existingMentors.map(m => {
+          const match = m.member_id.match(/^UDAAN-M(\d+)$/);
+          return match ? parseInt(match[1], 10) : 0;
+        }).filter(n => n > 0);
+
+        if (numbers.length > 0) {
+          nextNum = Math.max(...numbers) + 1;
+        }
+      }
+
+      memberId = `UDAAN-M${String(nextNum + attempt).padStart(3, '0')}`;
+    } else if (isCouncilMember) {
       // Council members use UDAAN-XXX format (001-099)
       const { data: existingCouncil, error: fetchCouncilError } = await supabase
         .from('members')
@@ -824,13 +856,13 @@ export async function addMemberWithYear(member: {
         name: member.name,
         email: member.email,
         password: member.password,
-        role: member.role,
+        role: isMentor ? 'Mentor' : member.role,
         division: member.division,
         clearance: clearance,
-        year: member.year,
+        year: isMentor ? 0 : (member.year || 1),
         status: insertStatus,
         added_by: member.added_by,
-        roll_no: member.roll_no || null,
+        roll_no: member.roll_no ? member.roll_no.toUpperCase() : null,
         department: member.department || null,
         institute_email: member.institute_email || null
       }])
@@ -1204,11 +1236,6 @@ export async function getTasksForMemberByRole(memberId: string, year: number, cl
       return data as Task[];
     }
 
-    if (year === 0 && role === 'Alumni') {
-      // Alumni cannot have tasks assigned
-      return [];
-    }
-
     // Regular members see their own tasks
     return await getTasksForMember(memberId);
   } catch (error) {
@@ -1369,22 +1396,7 @@ export async function getAnnouncementsForMember(memberId: string, memberRole: st
       return data as Announcement[];
     }
 
-    if (memberRole === 'Alumni') {
-      // Alumni see ONLY announcements created by UDAAN-000
-      const { data, error } = await supabase
-        .from('announcements')
-        .select('*')
-        .eq('created_by', 'UDAAN-000')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching admin announcements:', error);
-        return [];
-      }
-      return data as Announcement[];
-    }
-
-    // Regular members see all announcements
+    // Members see all announcements
     const { data, error } = await supabase
       .from('announcements')
       .select('*')
@@ -1847,14 +1859,12 @@ export async function sendIdChangeNotifications(
 ): Promise<IdChangeNotificationResult[]> {
   const results: IdChangeNotificationResult[] = [];
 
-  // Filter migrations to only those with ID changes (excluding UDAAN-000 and Alumni)
+  // Filter migrations to only those with ID changes (excluding UDAAN-000)
   const eligibleMigrations = migrations.filter(m => {
     // Must have a new ID different from old ID
     if (!m.newId || m.newId === m.oldId) return false;
     // Exclude UDAAN-000
     if (m.oldId === 'UDAAN-000') return false;
-    // Exclude Alumni (new role is Alumni or new ID starts with A-)
-    if (m.newRole === 'Alumni' || m.newId.startsWith('A-')) return false;
     return true;
   });
 
@@ -2016,6 +2026,110 @@ export async function changeMemberPassword(memberId: string, currentPassword: st
   return { success: true, message: 'Password changed successfully' };
 }
 
+/**
+ * Admin reset a member's password
+ * Can be executed by Super Admin (UDAAN-000) or Executive Body members (clearance >= 5).
+ * Resets the password to default temporary password (Admin@2026 for EB, Udaan@2026 for general members)
+ * and sets requires_password_change to true so the user must update it on next login.
+ */
+export async function adminResetMemberPassword(
+  targetMemberId: string,
+  adminMemberId: string
+): Promise<{ success: boolean; temporaryPassword?: string; message: string }> {
+  try {
+    // 1. Verify admin permissions
+    const { data: admin, error: adminErr } = await supabase
+      .from('members')
+      .select('member_id, name, clearance')
+      .eq('member_id', adminMemberId.toUpperCase())
+      .single();
+
+    if (adminErr || !admin) {
+      return { success: false, message: 'Unauthorized: Admin record not found' };
+    }
+
+    const isSuperAdminUser = admin.member_id === 'UDAAN-000' || admin.clearance >= 9;
+    const isEB = admin.clearance >= 5;
+
+    if (!isSuperAdminUser && !isEB) {
+      return { success: false, message: 'Unauthorized: Insufficient privileges to reset passwords' };
+    }
+
+    // 2. Fetch target member
+    const { data: target, error: targetErr } = await supabase
+      .from('members')
+      .select('member_id, name, role, clearance')
+      .eq('member_id', targetMemberId.toUpperCase())
+      .single();
+
+    if (targetErr || !target) {
+      return { success: false, message: 'Member not found' };
+    }
+
+    // Regular EB cannot reset other EB or Super Admin
+    if (!isSuperAdminUser && target.clearance >= 5) {
+      return { success: false, message: 'Only Super Admin can reset passwords for Executive Body members' };
+    }
+
+    // Cannot reset Super Admin unless caller is Super Admin
+    if (target.member_id === 'UDAAN-000' && admin.member_id !== 'UDAAN-000') {
+      return { success: false, message: 'Cannot reset Super Admin password' };
+    }
+
+    // 3. Determine temporary password
+    const tempPassword = target.clearance >= 5 ? 'Admin@2026' : 'Udaan@2026';
+
+    // 4. Hash temporary password
+    const bcrypt = await import('bcryptjs');
+    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+    // 5. Update password in database
+    const { error: updateErr } = await supabase
+      .from('members')
+      .update({
+        password: hashedPassword,
+        requires_password_change: true,
+        updated_at: new Date().toISOString()
+      })
+      .eq('member_id', target.member_id);
+
+    if (updateErr) {
+      // Fallback without requires_password_change in case column doesn't exist
+      const { error: fallbackErr } = await supabase
+        .from('members')
+        .update({
+          password: hashedPassword,
+          updated_at: new Date().toISOString()
+        })
+        .eq('member_id', target.member_id);
+
+      if (fallbackErr) {
+        console.error('Admin password reset error:', fallbackErr);
+        return { success: false, message: 'Failed to reset password in database' };
+      }
+    }
+
+    // 6. Log activity
+    await logActivity({
+      member_id: admin.member_id,
+      member_name: admin.name,
+      action: 'ADMIN_RESET_PASSWORD',
+      details: `Reset password for ${target.name} (${target.member_id}) to ${tempPassword}`,
+      target_type: 'member',
+      target_id: target.member_id
+    });
+
+    return {
+      success: true,
+      temporaryPassword: tempPassword,
+      message: `Password successfully reset to ${tempPassword}`
+    };
+  } catch (err: any) {
+    console.error('adminResetMemberPassword unexpected error:', err);
+    return { success: false, message: err?.message || 'Unexpected error during password reset' };
+  }
+}
+
 // ============ ACTIVITY LOGS ============
 
 export interface ActivityLog {
@@ -2111,16 +2225,81 @@ export interface Notification {
   announcement_type?: string;
 }
 
-/**
- * Create a notification for a member
- */
-export async function createNotification(notification: {
+export type NotificationTargetType = 'all' | 'division' | 'selected' | 'single';
+
+export interface NotificationRecipient {
   member_id: string;
-  type: 'task_assigned' | 'task_updated' | 'announcement' | 'mention' | 'reminder' | 'system';
-  title: string;
-  message: string;
-  link?: string;
-}): Promise<Notification | null> {
+  name: string;
+  email: string | null;
+  division?: string;
+  role?: string;
+  email_verified?: boolean;
+}
+
+/**
+ * Resolve target recipient members based on audience type
+ */
+export async function resolveNotificationRecipients(params: {
+  targetType: NotificationTargetType;
+  targetDivision?: string;
+  targetMemberIds?: string[];
+  singleMemberId?: string;
+  excludeMemberId?: string;
+}): Promise<NotificationRecipient[]> {
+  const { targetType, targetDivision, targetMemberIds, singleMemberId, excludeMemberId } = params;
+
+  try {
+    let query = supabase
+      .from('members')
+      .select('member_id, name, email, personal_email, email_verified, division, role, status, is_inactive')
+      .eq('status', 'approved');
+
+    if (targetType === 'single' && singleMemberId) {
+      query = query.eq('member_id', singleMemberId);
+    } else if (targetType === 'division' && targetDivision) {
+      query = query.eq('division', targetDivision);
+    } else if (targetType === 'selected' && targetMemberIds && targetMemberIds.length > 0) {
+      query = query.in('member_id', targetMemberIds);
+    }
+
+    const { data, error } = await query;
+    if (error || !data) {
+      console.error('Error resolving notification recipients:', error);
+      return [];
+    }
+
+    return data
+      .filter(m => !m.is_inactive && (!excludeMemberId || m.member_id !== excludeMemberId))
+      .map(m => ({
+        member_id: m.member_id,
+        name: m.name,
+        email: m.personal_email || m.email || null,
+        division: m.division,
+        role: m.role,
+        email_verified: m.email_verified
+      }));
+  } catch (err) {
+    console.error('Failed to resolve notification recipients:', err);
+    return [];
+  }
+}
+
+/**
+ * Create a notification for a member, with optional registered email dispatch
+ */
+export async function createNotification(
+  notification: {
+    member_id: string;
+    type: 'task_assigned' | 'task_updated' | 'announcement' | 'mention' | 'reminder' | 'system';
+    title: string;
+    message: string;
+    link?: string;
+  },
+  options?: {
+    sendEmail?: boolean;
+    senderName?: string;
+  }
+): Promise<Notification | null> {
   const { data, error } = await supabase
     .from('notifications')
     .insert([{
@@ -2135,23 +2314,60 @@ export async function createNotification(notification: {
     return null;
   }
 
+  // Optional background email alert dispatch
+  if (options?.sendEmail) {
+    (async () => {
+      try {
+        const { data: member } = await supabase
+          .from('members')
+          .select('name, personal_email, email')
+          .eq('member_id', notification.member_id)
+          .single();
+        const email = member?.personal_email || member?.email;
+        if (email) {
+          const { sendNotificationEmail } = await import('./email');
+          await sendNotificationEmail(
+            email,
+            member.name || 'Member',
+            notification.title,
+            notification.message,
+            notification.type,
+            options.senderName || 'Flight Command',
+            notification.link || 'https://udaannitr.in/team-login'
+          );
+        }
+      } catch (emailErr) {
+        console.warn('Background notification email failed:', emailErr);
+      }
+    })();
+  }
+
   return data as Notification;
 }
 
 /**
- * Create notifications for multiple members (e.g., broadcast announcement)
+ * Create notifications for multiple members (e.g., broadcast announcement or targeted team)
  */
-export async function createBulkNotifications(notifications: Array<{
-  member_id: string;
-  type: 'task_assigned' | 'task_updated' | 'announcement' | 'mention' | 'reminder' | 'system';
-  title: string;
-  message: string;
-  link?: string;
-  // Optional announcement metadata
-  announcement_id?: string; // uuid reference
-  event_date?: string;
-  announcement_type?: string;
-}>): Promise<boolean> {
+export async function createBulkNotifications(
+  notifications: Array<{
+    member_id: string;
+    type: 'task_assigned' | 'task_updated' | 'announcement' | 'mention' | 'reminder' | 'system';
+    title: string;
+    message: string;
+    link?: string;
+    // Optional announcement metadata
+    announcement_id?: string; // uuid reference
+    event_date?: string;
+    announcement_type?: string;
+  }>,
+  options?: {
+    sendEmail?: boolean;
+    senderName?: string;
+    category?: string;
+  }
+): Promise<boolean> {
+  if (notifications.length === 0) return true;
+
   const notificationsWithRead = notifications.map(n => ({ ...n, read: false }));
 
   const { error } = await supabase
@@ -2163,7 +2379,140 @@ export async function createBulkNotifications(notifications: Array<{
     return false;
   }
 
+  // Optional background bulk email dispatch
+  if (options?.sendEmail) {
+    (async () => {
+      try {
+        const recipientIds = Array.from(new Set(notifications.map(n => n.member_id)));
+        const { data: members } = await supabase
+          .from('members')
+          .select('member_id, name, personal_email, email')
+          .in('member_id', recipientIds);
+
+        if (members && members.length > 0) {
+          const validRecipients = members
+            .map(m => ({
+              email: m.personal_email || m.email || '',
+              name: m.name || 'Member'
+            }))
+            .filter(r => !!r.email && r.email.includes('@'));
+
+          if (validRecipients.length > 0) {
+            const firstNotif = notifications[0];
+            const { sendBulkNotificationEmails } = await import('./email');
+            await sendBulkNotificationEmails(
+              validRecipients,
+              firstNotif.title,
+              firstNotif.message,
+              options.category || firstNotif.type || 'Notification',
+              options.senderName || 'Flight Command',
+              firstNotif.link || 'https://udaannitr.in/team-login'
+            );
+          }
+        }
+      } catch (bulkEmailErr) {
+        console.warn('Background bulk notification emails failed:', bulkEmailErr);
+      }
+    })();
+  }
+
   return true;
+}
+
+/**
+ * High-level helper to dispatch a targeted notification to all members, a division, selected members, or a single person
+ */
+export async function dispatchTargetedNotification(params: {
+  targetType: NotificationTargetType;
+  targetDivision?: string;
+  targetMemberIds?: string[];
+  singleMemberId?: string;
+  title: string;
+  message: string;
+  type?: 'task_assigned' | 'task_updated' | 'announcement' | 'mention' | 'reminder' | 'system';
+  category?: string;
+  link?: string;
+  senderId: string;
+  senderName: string;
+  sendEmail: boolean;
+}): Promise<{
+  success: boolean;
+  recipientCount: number;
+  emailCount: number;
+  error?: string;
+}> {
+  try {
+    const recipients = await resolveNotificationRecipients({
+      targetType: params.targetType,
+      targetDivision: params.targetDivision,
+      targetMemberIds: params.targetMemberIds,
+      singleMemberId: params.singleMemberId,
+      excludeMemberId: params.senderId
+    });
+
+    if (recipients.length === 0) {
+      return {
+        success: false,
+        recipientCount: 0,
+        emailCount: 0,
+        error: 'No eligible recipients found for the selected audience.'
+      };
+    }
+
+    const notifications = recipients.map(r => ({
+      member_id: r.member_id,
+      type: params.type || 'announcement',
+      link: params.link
+        ? (params.link.startsWith('http://') || params.link.startsWith('https://')
+          ? params.link
+          : `https://udaannitr.in${params.link.startsWith('/') ? '' : '/'}${params.link}`)
+        : 'https://udaannitr.in/team-login',
+      announcement_type: params.category || 'update'
+    }));
+
+    const inAppSuccess = await createBulkNotifications(notifications, {
+      sendEmail: params.sendEmail,
+      senderName: params.senderName,
+      category: params.category || 'Notification'
+    });
+
+    if (!inAppSuccess) {
+      return {
+        success: false,
+        recipientCount: 0,
+        emailCount: 0,
+        error: 'Failed to record notifications in the database.'
+      };
+    }
+
+    const emailCount = params.sendEmail
+      ? recipients.filter(r => !!r.email && r.email.includes('@')).length
+      : 0;
+
+    // Log the action in activity log
+    await logActivity({
+      member_id: params.senderId,
+      member_name: params.senderName,
+      action: 'targeted_notification_sent',
+      details: `Sent notification "${params.title}" to ${recipients.length} members (${params.targetType}${params.targetDivision ? `: ${params.targetDivision}` : ''}). Email alert: ${params.sendEmail ? 'YES' : 'NO'}`,
+      target_type: 'notification',
+      target_id: params.targetType
+    });
+
+    return {
+      success: true,
+      recipientCount: recipients.length,
+      emailCount
+    };
+  } catch (err: any) {
+    console.error('Error dispatching targeted notification:', err);
+    return {
+      success: false,
+      recipientCount: 0,
+      emailCount: 0,
+      error: err?.message || 'Unexpected error occurred while dispatching notifications.'
+    };
+  }
 }
 
 /**
@@ -3593,53 +3942,6 @@ export async function transferCouncil(
       migrations.push(update);
     }
 
-    // E. 4TH YEAR → ALUMNI (with A-XXXX ID format)
-    // Alumni IDs are permanent and never reused (separate namespace from UDAAN-XXXX)
-    const fourthYearMembers = allMembers.filter(m => m.year === 4);
-
-    // Get the highest existing alumni ID to continue the sequence
-    const { data: existingAlumni } = await supabase
-      .from('members')
-      .select('member_id')
-      .like('member_id', 'A-%')
-      .order('member_id', { ascending: false });
-
-    let nextAlumniNumber = 1;
-    if (existingAlumni && existingAlumni.length > 0) {
-      const numbers = existingAlumni.map(a => {
-        const match = a.member_id.match(/A-(\d+)/);
-        return match ? parseInt(match[1], 10) : 0;
-      }).filter(n => !isNaN(n) && n > 0);
-
-      if (numbers.length > 0) {
-        nextAlumniNumber = Math.max(...numbers) + 1;
-      }
-    }
-
-    for (const member of fourthYearMembers) {
-      // Generate new alumni ID in A-XXXX format
-      const newAlumniId = `A-${String(nextAlumniNumber).padStart(4, '0')}`;
-      nextAlumniNumber++;
-
-      const update: MemberUpdate = {
-        oldId: member.member_id,
-        newId: newAlumniId, // Alumni get new A-XXXX ID
-        oldYear: 4,
-        newYear: 0, // Alumni year
-        oldRole: member.role,
-        newRole: 'Alumni',
-        oldClearance: member.clearance,
-        newClearance: 0, // Alumni clearance (can only view announcements)
-        updates: {
-          member_id: newAlumniId,
-          year: 0,
-          clearance: 0,
-          role: 'Alumni'
-        }
-      };
-      migrations.push(update);
-    }
-
     // ========== PHASE 4: Execute all migrations ==========
     for (const migration of migrations) {
       // Only update if the ID is changing
@@ -3745,86 +4047,14 @@ export async function transferCouncil(
 }
 /**
  * Add alumni manually (ONLY UDAAN-000 can do this)
- * Alumni IDs are in A-XXXX format and are permanent/never reused
+/**
+ * Add alumni manually - DEPRECATED (Alumni features removed)
  */
 export async function addAlumniMember(
-  adminId: string,
-  alumni: {
-    name: string;
-    email: string;
-    password: string;
-    division: string;
-    department?: string;
-    roll_no?: string;
-  }
+  _adminId: string,
+  _alumni: any
 ): Promise<{ success: boolean; message: string; member?: Member }> {
-  // Only UDAAN-000 can add alumni
-  if (!isSuperAdmin(adminId)) {
-    return { success: false, message: 'Only UDAAN-000 can add alumni members' };
-  }
-
-  try {
-    // Get the next alumni ID
-    const { data: existingAlumni } = await supabase
-      .from('members')
-      .select('member_id')
-      .like('member_id', 'A-%')
-      .order('member_id', { ascending: false });
-
-    let nextAlumniNumber = 1;
-    if (existingAlumni && existingAlumni.length > 0) {
-      const numbers = existingAlumni.map(a => {
-        const match = a.member_id.match(/A-(\d+)/);
-        return match ? parseInt(match[1], 10) : 0;
-      }).filter(n => !isNaN(n) && n > 0);
-
-      if (numbers.length > 0) {
-        nextAlumniNumber = Math.max(...numbers) + 1;
-      }
-    }
-
-    const alumniId = `A-${String(nextAlumniNumber).padStart(4, '0')}`;
-
-    // Insert the alumni member
-    const { data, error } = await supabase
-      .from('members')
-      .insert([{
-        member_id: alumniId,
-        name: alumni.name,
-        email: alumni.email,
-        password: alumni.password,
-        role: 'Alumni',
-        division: alumni.division,
-        year: 0, // Alumni year
-        clearance: 0, // Alumni clearance
-        status: 'approved',
-        added_by: adminId,
-        department: alumni.department || null,
-        roll_no: alumni.roll_no || null
-      }])
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error adding alumni:', error);
-      return { success: false, message: 'Failed to add alumni member' };
-    }
-
-    // Log the activity
-    await logActivity({
-      member_id: adminId,
-      member_name: 'UDAAN Administration',
-      action: 'alumni_added',
-      details: `Added alumni ${alumni.name} with ID ${alumniId}`,
-      target_type: 'member',
-      target_id: alumniId
-    });
-
-    return { success: true, message: `Alumni added with ID: ${alumniId}`, member: data as Member };
-  } catch (error: any) {
-    console.error('Error adding alumni:', error);
-    return { success: false, message: error.message || 'Failed to add alumni' };
-  }
+  return { success: false, message: 'Alumni feature has been removed' };
 }
 
 /**
@@ -3877,9 +4107,9 @@ export function canUploadPhoto(member: Member): { allowed: boolean; reason?: str
     return { allowed: false, reason: 'System administrator accounts do not have ID cards' };
   }
 
-  // Alumni cannot have a photo
-  if (member.role === 'Alumni' || member.clearance === 0) {
-    return { allowed: false, reason: 'Alumni members do not have active ID cards' };
+  // Inactive / clearance 0 accounts cannot have an active ID card photo
+  if (member.clearance === 0) {
+    return { allowed: false, reason: 'Inactive accounts do not have active ID cards' };
   }
 
   // Check 1-year lock

@@ -277,7 +277,7 @@ export function getIdChangeEmailHtml(name: string, oldId: string, newId: string,
  */
 export function getInductionSuccessEmailHtml(name: string, memberId: string): string {
     const today = new Date().getFullYear();
-    const loginUrl = 'https://udaan-website-delta.vercel.app/team-login';
+    const loginUrl = 'https://udaannitr.in/team-login';
 
     return `
     <!DOCTYPE html>

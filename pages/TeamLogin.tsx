@@ -13,7 +13,7 @@ import {
     ListTodo, ClipboardList, Bell, Settings, LogOut, BarChart3, Users,
     FileText, MessageSquare, Award, TrendingUp, Circle, Send, X, Trash2, UserPlus,
     Eye, Edit3, MoreVertical, Phone, Mail, Hash, ExternalLink, Camera, Upload, Search,
-    ToggleLeft, ToggleRight, Code
+    ToggleLeft, ToggleRight, Code, Key, Copy
 } from 'lucide-react';
 
 import {
@@ -43,10 +43,15 @@ import {
     deleteOldNotifications,
     createNotification,
     createBulkNotifications,
+    dispatchTargetedNotification,
+    resolveNotificationRecipients,
+    type NotificationTargetType,
+    type NotificationRecipient,
     logActivity,
     getRecentActivity,
     removeMemberCompletely,
     changeMemberPassword,
+    adminResetMemberPassword,
     updateMemberProfile,
     sendEmailVerificationCode,
     verifyEmailCode,
@@ -218,9 +223,8 @@ const Sidebar = ({ member, activeTab, setActiveTab, onLogout, unreadCount, pendi
     const isPresident = member.role.toLowerCase().includes('president') && !member.role.toLowerCase().includes('vice');
     const is4thYear = member.year === 4;
     const superAdmin = isSuperAdmin(member.member_id);
-    const isAlumni = member.role === 'Alumni' || member.year === 0;
     const isProvisional = member.status === 'provisional';
-    const canAssignTasks = (isCouncil || is4thYear) && !isAlumni;
+    const canAssignTasks = isCouncil || is4thYear;
 
     // Check if current member is a division head
     const isDivisionHead = Object.values(DIVISION_HEADS).some(h => h.member_id === member.member_id);
@@ -248,7 +252,6 @@ const Sidebar = ({ member, activeTab, setActiveTab, onLogout, unreadCount, pendi
     // Build menu items based on role
     // Super Admin: All items + council transfer
     // Council: Standard council items
-    // Alumni: Limited items (dashboard, notifications, announcements, ID card, settings)
     // Regular: Standard member items
     let menuItems: { id: string; label: string; icon: React.ReactNode; badge: number; showDot: boolean; completed?: boolean }[] = [];
 
@@ -260,14 +263,6 @@ const Sidebar = ({ member, activeTab, setActiveTab, onLogout, unreadCount, pendi
             { id: 'task-registration', label: 'Task 1 (Registration)', icon: <ClipboardList size={20} />, badge: 0, showDot: false, completed: true },
             { id: 'task-online-test', label: 'Task 2 (Online Test)', icon: <FileText size={20} />, badge: 0, showDot: false, completed: true },
             { id: 'task-assigned', label: 'Task 3 (Assigned Task)', icon: <ListTodo size={20} />, badge: 0, showDot: false },
-            { id: 'settings', label: 'Settings', icon: <Settings size={20} />, badge: 0, showDot: false },
-        ];
-    } else if (isAlumni && !superAdmin) {
-        // Alumni have limited access
-        menuItems = [
-            { id: 'dashboard', label: 'Dashboard', icon: <BarChart3 size={20} />, badge: 0, showDot: false },
-            { id: 'notifications', label: 'Notifications', icon: <Bell size={20} />, badge: unreadCount, showDot: false },
-            { id: 'id-card', label: 'ID Card', icon: <User size={20} />, badge: 0, showDot: false },
             { id: 'settings', label: 'Settings', icon: <Settings size={20} />, badge: 0, showDot: false },
         ];
     } else if (superAdmin) {
@@ -1499,20 +1494,19 @@ const AdminReportTab = ({ currentMember }: { currentMember: Member }) => {
         const fetchData = async () => {
             setIsLoading(true);
             try {
-                const { getAllTasks, getAnnouncements, getAllActivityLogs, getActiveMembers, getAlumniMembers } = await import('../utils/supabase');
+                const { getAllTasks, getAnnouncements, getAllActivityLogs, getActiveMembers } = await import('../utils/supabase');
 
-                const [allTasks, allAnnouncements, logs, activeMembers, alumni] = await Promise.all([
+                const [allTasks, allAnnouncements, logs, activeMembers] = await Promise.all([
                     getAllTasks(),
                     getAnnouncements(), // This fetches all announcements
                     getAllActivityLogs(50),
-                    getActiveMembers(),
-                    getAlumniMembers()
+                    getActiveMembers()
                 ]);
 
                 setTasks(allTasks);
                 setAnnouncements(allAnnouncements);
                 setActivityLogs(logs);
-                setMembers([...activeMembers, ...alumni] as Member[]);
+                setMembers(activeMembers as Member[]);
             } catch (error) {
                 // Error handled silently
             }
@@ -1544,7 +1538,6 @@ const AdminReportTab = ({ currentMember }: { currentMember: Member }) => {
         total: members.length,
         council: members.filter(m => m.clearance >= 5 && m.member_id !== 'UDAAN-000').length,
         regular: members.filter(m => m.clearance > 0 && m.clearance < 5).length,
-        alumni: members.filter(m => m.year === 0 || m.role === 'Alumni').length,
     };
 
     if (isLoading) {
@@ -1599,7 +1592,7 @@ const AdminReportTab = ({ currentMember }: { currentMember: Member }) => {
                             <p className="text-white/50 text-xs uppercase tracking-wider">Total Members</p>
                             <p className="text-3xl font-bold text-white mt-1">{memberStats.total}</p>
                             <p className="text-white/40 text-xs mt-1">
-                                {memberStats.council} council • {memberStats.regular} members • {memberStats.alumni} alumni
+                                {memberStats.council} council • {memberStats.regular} members
                             </p>
                         </div>
                         <div className="bg-gray-800/50 rounded-xl border border-white/10 p-4">
@@ -1835,7 +1828,6 @@ const CouncilTransferTab = ({ currentMember }: { currentMember: Member }) => {
                 const eligible = members.filter(m =>
                     m.year === 2 &&
                     m.clearance < 5 &&
-                    m.role !== 'Alumni' &&
                     !isSuperAdmin(m.member_id)
                 );
                 setSecondYearMembers(eligible);
@@ -2092,7 +2084,6 @@ const CouncilTransferTab = ({ currentMember }: { currentMember: Member }) => {
                 const eligible = members.filter(m =>
                     m.year === 2 &&
                     m.clearance < 5 &&
-                    m.role !== 'Alumni' &&
                     !isSuperAdmin(m.member_id)
                 );
                 setSecondYearMembers(eligible);
@@ -2135,7 +2126,6 @@ const CouncilTransferTab = ({ currentMember }: { currentMember: Member }) => {
                     <li>Non-selected 2nd years → 3rd year (UDAAN-20XX → UDAAN-30XX)</li>
                     <li>3rd years → 4th year (UDAAN-30XX → UDAAN-40XX)</li>
                     <li>1st years → 2nd year (UDAAN-10XX → UDAAN-20XX)</li>
-                    <li>4th years → Alumni (A-000X format)</li>
                 </ul>
             </div>
 
@@ -2611,7 +2601,7 @@ const IDCardTab = ({ member }: { member: Member }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const photoContainerRef = useRef<HTMLDivElement>(null);
 
-    // Check if photo upload is allowed (1-year lock, alumni/admin restrictions)
+    // Check if photo upload is allowed (1-year lock, admin restrictions)
     const photoUploadStatus = canUploadPhoto(member);
 
     // Accepted input formats (user-friendly)
@@ -2823,35 +2813,6 @@ const IDCardTab = ({ member }: { member: Member }) => {
                         </p>
                         <p className="text-white/40 text-xs mt-2">
                             This account exists for administrative purposes only and is not displayed in team views.
-                        </p>
-                    </div>
-                </motion.div>
-            </div>
-        );
-    }
-
-    // Alumni should not have an ID card (restricted access)
-    if (member.role === 'Alumni' || member.clearance === 0) {
-        return (
-            <div className="max-w-xl mx-auto">
-                <h1 className="text-2xl font-bold text-white mb-6">Digital ID Card</h1>
-
-                <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="bg-gradient-to-br from-gray-900/50 to-gray-800/30 rounded-2xl border border-white/10 p-8 text-center"
-                >
-                    <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-white/10 flex items-center justify-center">
-                        <User size={40} className="text-white/30" />
-                    </div>
-                    <h2 className="text-xl font-bold text-white/50 mb-2">Alumni Member</h2>
-                    <p className="text-white/40 mb-4">{member.member_id}</p>
-                    <div className="bg-black/30 rounded-lg p-4 border border-white/10">
-                        <p className="text-white/40 text-sm">
-                            Alumni members do not have active ID cards.
-                        </p>
-                        <p className="text-white/30 text-xs mt-2">
-                            Thank you for your contributions to UDAAN.
                         </p>
                     </div>
                 </motion.div>
@@ -3515,6 +3476,23 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
     const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; member: Member | null }>({ show: false, member: null });
     const [isDeleting, setIsDeleting] = useState(false);
     const [togglingInactive, setTogglingInactive] = useState<string | null>(null);
+    const [resetPasswordModal, setResetPasswordModal] = useState<{
+        show: boolean;
+        member: Member | null;
+        temporaryPassword: string;
+        success: boolean;
+        loading: boolean;
+        error: string;
+        copied: boolean;
+    }>({
+        show: false,
+        member: null,
+        temporaryPassword: '',
+        success: false,
+        loading: false,
+        error: '',
+        copied: false
+    });
 
     // State for edit modal
     const [editMember, setEditMember] = useState<Member | null>(null);
@@ -3672,6 +3650,50 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
         }
         setDeleteConfirm({ show: false, member: null });
         setIsDeleting(false);
+    };
+
+    const canResetPassword = (target: Member): boolean => {
+        if (!currentMember) return false;
+        if (superAdmin) return true; // Super Admin can reset anyone
+        if (isCouncil) {
+            // Council can reset regular members and mentors (clearance < 5)
+            return target.clearance < 5;
+        }
+        return false;
+    };
+
+    const handleAdminResetPassword = async () => {
+        if (!currentMember || !resetPasswordModal.member) return;
+        setResetPasswordModal(prev => ({ ...prev, loading: true, error: '' }));
+
+        try {
+            const result = await adminResetMemberPassword(
+                resetPasswordModal.member.member_id,
+                currentMember.member_id
+            );
+
+            if (result.success) {
+                setResetPasswordModal(prev => ({
+                    ...prev,
+                    loading: false,
+                    success: true,
+                    temporaryPassword: result.temporaryPassword || 'Udaan@2026',
+                    error: ''
+                }));
+            } else {
+                setResetPasswordModal(prev => ({
+                    ...prev,
+                    loading: false,
+                    error: result.message || 'Failed to reset password'
+                }));
+            }
+        } catch (err: any) {
+            setResetPasswordModal(prev => ({
+                ...prev,
+                loading: false,
+                error: err?.message || 'Error resetting password'
+            }));
+        }
     };
 
     const canDeleteMember = (member: Member): boolean => {
@@ -3973,6 +3995,28 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
                                             Remove Member
                                         </button>
                                     )}
+                                    {/* Admin Reset Password option for council and super admin */}
+                                    {canResetPassword(member) && (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setDetailsOpen(null);
+                                                setResetPasswordModal({
+                                                    show: true,
+                                                    member,
+                                                    temporaryPassword: '',
+                                                    success: false,
+                                                    loading: false,
+                                                    error: '',
+                                                    copied: false
+                                                });
+                                            }}
+                                            className="w-full flex items-center gap-2 px-4 py-2.5 text-amber-400 hover:bg-amber-500/10 transition-colors text-sm"
+                                        >
+                                            <Key size={14} />
+                                            Reset Password
+                                        </button>
+                                    )}
                                 </motion.div>
                             )}
                         </AnimatePresence>
@@ -3992,45 +4036,6 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
         )
     };
 
-    // Alumni Card Component - greyed out, read-only, non-interactive
-    // Shows only: Name, Alumni ID, Division (hides: clearance, year, tasks, action buttons)
-    const AlumniCard = ({ member }: { member: Member }) => (
-        <div
-            // Greyed styling: reduced opacity, muted border, no hover effects
-            className="bg-gray-800/20 rounded-xl p-5 border border-white/10 opacity-60 cursor-default"
-        >
-            <div className="flex items-center gap-4">
-                {/* Greyed avatar */}
-                <div className="w-12 h-12 rounded-full bg-gray-700/30 flex items-center justify-center text-white/30">
-                    {getIcon(member.icon, 20)}
-                </div>
-                <div className="min-w-0 flex-1">
-                    {/* Muted text color for alumni name */}
-                    <h3 className="text-white/50 font-bold truncate">{formatName(member.name)}</h3>
-                    {/* No role shown for alumni - just "Alumni" indicator via styling */}
-                </div>
-                {/* No menu button for alumni - read-only */}
-            </div>
-            <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between">
-                {/* Division tags in muted grey */}
-                <div className="flex flex-wrap gap-1">
-                    {getMemberDivisions(member).map(divId => (
-                        <span key={divId} className="text-[10px] px-2 py-1 rounded-full bg-white/5 text-white/30 border border-white/10">
-                            {divisions.find(d => d.id === divId)?.label}
-                        </span>
-                    ))}
-                </div>
-                {/* Alumni ID in muted text */}
-                <span className="text-white/20 text-xs font-mono">{member.member_id}</span>
-            </div>
-        </div>
-    );
-
-    // Helper: Check if member is alumni (clearance 0 or role Alumni)
-    const isAlumniMember = (member: Member): boolean => {
-        return member.clearance === 0 || member.role === 'Alumni';
-    };
-
     // DEFENSIVE GUARD: Check if member is provisional (should never appear in Team section)
     // This is a last-resort safety check - primary filtering is in getMembers() query
     const isProvisionalMember = (member: Member): boolean => {
@@ -4039,12 +4044,8 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
         return member.status !== undefined && member.status !== 'approved';
     };
 
-    // Filter active members (exclude alumni AND provisional members) for year sections
-    // CRITICAL: Double-safety ensures provisional members never appear in Team section
-    const activeMembers = filteredMembers.filter(m => !isAlumniMember(m) && !isProvisionalMember(m));
-
-    // Filter alumni members separately (also exclude provisional as safety)
-    const alumniMembers = filteredMembers.filter(m => isAlumniMember(m) && !isProvisionalMember(m));
+    // Filter active members (exclude provisional members) for year sections
+    const activeMembers = filteredMembers.filter(m => !isProvisionalMember(m));
 
     if (loading) {
         return (
@@ -4083,7 +4084,7 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
                     </div>
                     <div>
                         <h2 className="text-lg font-bold text-white">{divisions.find(d => d.id === activeDiv)?.label}</h2>
-                        <p className="text-white/40 text-sm">{activeMembers.length} active member{activeMembers.length !== 1 ? 's' : ''}{alumniMembers.length > 0 ? `, ${alumniMembers.length} alumni` : ''}</p>
+                        <p className="text-white/40 text-sm">{activeMembers.length} active member{activeMembers.length !== 1 ? 's' : ''}</p>
                     </div>
                 </div>
             )}
@@ -4117,7 +4118,7 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
                 </>
             )}
 
-            {/* 4th Year Section - Active members only (excludes alumni and mentors) */}
+            {/* 4th Year Section - Active members only (excludes mentors) */}
             {activeMembers.filter(m => getMemberYear(m) === 4 && m.role !== 'Mentor').length > 0 && (
                 <>
                     <div className="flex items-center gap-4 mt-8">
@@ -4144,7 +4145,7 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
                 </>
             )}
 
-            {/* 5th Year Section - Active members only (excludes alumni) */}
+            {/* 5th Year Section - Active members only */}
             {activeMembers.filter(m => getMemberYear(m) === 5).length > 0 && (
                 <>
                     <div className="flex items-center gap-4 mt-8">
@@ -4171,7 +4172,7 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
                 </>
             )}
 
-            {/* 3rd Year Section - Active members only (excludes alumni) */}
+            {/* 3rd Year Section - Active members only */}
             {activeMembers.filter(m => getMemberYear(m) === 3).length > 0 && (
                 <>
                     <div className="flex items-center gap-4 mt-8">
@@ -4198,7 +4199,7 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
                 </>
             )}
 
-            {/* 2nd Year Section - Active members only (excludes alumni) */}
+            {/* 2nd Year Section - Active members only */}
             {activeMembers.filter(m => getMemberYear(m) === 2).length > 0 && (
                 <>
                     <div className="flex items-center gap-4 mt-8">
@@ -4225,7 +4226,7 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
                 </>
             )}
 
-            {/* 1st Year Section - Active members only (excludes alumni) */}
+            {/* 1st Year Section - Active members only */}
             {activeMembers.filter(m => getMemberYear(m) === 1).length > 0 && (
                 <>
                     <div className="flex items-center gap-4 mt-8">
@@ -4247,23 +4248,6 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
                                 inactiveGradientTo="to-pink-900/20"
                                 inactiveTextColor="text-purple-600/60"
                             />
-                        ))}
-                    </div>
-                </>
-            )}
-
-            {/* Alumni Section - Greyed out, read-only, informational only */}
-            {/* Alumni are visible but visually differentiated from active members */}
-            {alumniMembers.length > 0 && (
-                <>
-                    <div className="flex items-center gap-4 mt-8">
-                        <div className="h-px flex-1 bg-gradient-to-r from-gray-500/30 to-transparent"></div>
-                        <span className="text-white/30 text-sm font-bold uppercase tracking-wider">Alumni</span>
-                        <div className="h-px flex-1 bg-gradient-to-l from-gray-500/30 to-transparent"></div>
-                    </div>
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {alumniMembers.map((member) => (
-                            <AlumniCard key={member.id} member={member} />
                         ))}
                     </div>
                 </>
@@ -4345,6 +4329,148 @@ const TeamTab = ({ currentMember }: { currentMember?: Member }) => {
                                     )}
                                 </button>
                             </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Admin Reset Password Modal */}
+            <AnimatePresence>
+                {resetPasswordModal.show && resetPasswordModal.member && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                        onClick={() => !resetPasswordModal.loading && setResetPasswordModal(prev => ({ ...prev, show: false, member: null }))}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="bg-gray-900 border border-white/10 rounded-2xl p-6 max-w-md w-full shadow-2xl"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            {!resetPasswordModal.success ? (
+                                <>
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <div className="w-12 h-12 bg-amber-500/20 rounded-full flex items-center justify-center text-amber-400">
+                                            <Key size={24} />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-white font-bold text-lg">Reset Password</h3>
+                                            <p className="text-white/50 text-sm">Administrative Account Reset</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white/5 rounded-xl p-4 mb-4 border border-white/10">
+                                        <p className="text-white font-semibold">{formatName(resetPasswordModal.member.name)}</p>
+                                        <p className="text-white/50 text-sm">{resetPasswordModal.member.member_id} • {resetPasswordModal.member.role}</p>
+                                    </div>
+
+                                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-5 text-sm space-y-2">
+                                        <p className="text-amber-300 font-medium">
+                                            This will reset the member's password to:
+                                        </p>
+                                        <div className="font-mono bg-black/40 px-3 py-1.5 rounded text-amber-400 font-bold text-base select-all">
+                                            {resetPasswordModal.member.clearance >= 5 ? 'Admin@2026' : 'Udaan@2026'}
+                                        </div>
+                                        <p className="text-white/60 text-xs">
+                                            The member will be required to create a new personal password immediately upon their next login.
+                                        </p>
+                                    </div>
+
+                                    {resetPasswordModal.error && (
+                                        <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm flex items-center gap-2">
+                                            <AlertCircle size={16} />
+                                            <span>{resetPasswordModal.error}</span>
+                                        </div>
+                                    )}
+
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={() => setResetPasswordModal(prev => ({ ...prev, show: false, member: null }))}
+                                            disabled={resetPasswordModal.loading}
+                                            className="flex-1 px-4 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-lg transition-colors font-medium disabled:opacity-50"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={handleAdminResetPassword}
+                                            disabled={resetPasswordModal.loading}
+                                            className="flex-1 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-black font-bold rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-amber-500/20"
+                                        >
+                                            {resetPasswordModal.loading ? (
+                                                <>
+                                                    <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin"></div>
+                                                    Resetting...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Key size={16} />
+                                                    Reset Password
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <div className="w-12 h-12 bg-green-500/20 rounded-full flex items-center justify-center text-green-400">
+                                            <CheckCircle2 size={24} />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-white font-bold text-lg">Password Reset Complete</h3>
+                                            <p className="text-white/50 text-sm">Temporary password generated</p>
+                                        </div>
+                                    </div>
+
+                                    <p className="text-white/70 text-sm mb-4">
+                                        The password for <span className="text-white font-medium">{formatName(resetPasswordModal.member.name)}</span> has been reset. Please provide them with the temporary password below:
+                                    </p>
+
+                                    <div className="bg-black/40 border border-green-500/30 rounded-xl p-4 mb-5 flex items-center justify-between">
+                                        <div>
+                                            <p className="text-xs text-white/40 uppercase font-mono tracking-wider">Temporary Password</p>
+                                            <p className="text-lg font-bold font-mono text-green-400 select-all mt-0.5">
+                                                {resetPasswordModal.temporaryPassword}
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(resetPasswordModal.temporaryPassword);
+                                                setResetPasswordModal(prev => ({ ...prev, copied: true }));
+                                                setTimeout(() => setResetPasswordModal(prev => ({ ...prev, copied: false })), 2000);
+                                            }}
+                                            className="px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors flex items-center gap-1.5 text-xs font-medium"
+                                        >
+                                            {resetPasswordModal.copied ? (
+                                                <>
+                                                    <Check size={14} className="text-green-400" />
+                                                    <span className="text-green-400">Copied!</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Copy size={14} />
+                                                    <span>Copy</span>
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+
+                                    <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 mb-6 text-xs text-blue-300">
+                                        ℹ️ When they log in with this password, they will be prompted to set a new personal password before entering the Flight Deck.
+                                    </div>
+
+                                    <button
+                                        onClick={() => setResetPasswordModal({ show: false, member: null, temporaryPassword: '', success: false, loading: false, error: '', copied: false })}
+                                        className="w-full px-4 py-2.5 bg-green-500 hover:bg-green-600 text-black font-bold rounded-lg transition-colors"
+                                    >
+                                        Done
+                                    </button>
+                                </>
+                            )}
                         </motion.div>
                     </motion.div>
                 )}
@@ -4804,7 +4930,15 @@ const DivisionRequestsTab = ({ currentMember }: { currentMember: Member }) => {
 };
 
 // Settings Tab Component
-const SettingsTab = ({ currentMember, onLogout }: { currentMember: Member; onLogout: () => void }) => {
+const SettingsTab = ({
+    currentMember,
+    onLogout,
+    onUpdateMember
+}: {
+    currentMember: Member;
+    onLogout: () => void;
+    onUpdateMember?: (updated: Member) => void;
+}) => {
     const [activeSection, setActiveSection] = useState<'password' | 'profile' | null>(null);
     const isProvisional = sessionStorage.getItem('udaanIsProvisional') === 'true';
 
@@ -4855,19 +4989,48 @@ const SettingsTab = ({ currentMember, onLogout }: { currentMember: Member; onLog
         const checkVerification = async () => {
             const status = await getEmailVerificationStatus(currentMember.member_id);
             setEmailVerified(status.verified);
-            if (status.email) setSavedEmail(status.email);
+            if (status.email) {
+                setSavedEmail(status.email);
+                if (status.verified && editPersonalEmail.trim().toLowerCase() === status.email.trim().toLowerCase()) {
+                    setEmailVerified(true);
+                }
+            }
         };
         checkVerification();
     }, [currentMember.member_id]);
 
-    // Reset verification when email changes
+    // Keep form in sync when currentMember updates
     useEffect(() => {
-        if (editPersonalEmail !== savedEmail && savedEmail) {
+        if (!isChangingEmail) {
+            setEditPersonalEmail(currentMember.personal_email || '');
+            setSavedEmail(currentMember.personal_email || '');
+            if (currentMember.email_verified) {
+                setEmailVerified(true);
+            }
+        }
+        setEditRollNo(currentMember.roll_no || '');
+        setEditPhone(currentMember.phone || '');
+    }, [currentMember]);
+
+    // Track whether personal email is different from saved/registered email
+    const isEmailChanged = editPersonalEmail.trim().toLowerCase() !== (savedEmail || currentMember.personal_email || '').trim().toLowerCase();
+
+    // Reset or restore verification based on whether email matches saved verified email
+    useEffect(() => {
+        const matchesSaved = editPersonalEmail.trim().toLowerCase() === (savedEmail || currentMember.personal_email || '').trim().toLowerCase();
+        if (matchesSaved && (currentMember.email_verified || savedEmail)) {
+            if (currentMember.email_verified) {
+                setEmailVerified(true);
+            }
+            setShowVerificationInput(false);
+            setVerificationCode('');
+            setVerificationError('');
+        } else if (!matchesSaved) {
             setEmailVerified(false);
             setShowVerificationInput(false);
             setVerificationCode('');
         }
-    }, [editPersonalEmail, savedEmail]);
+    }, [editPersonalEmail, savedEmail, currentMember.email_verified]);
 
     // Phone verification removed: no phone OTP handling
 
@@ -4903,7 +5066,6 @@ const SettingsTab = ({ currentMember, onLogout }: { currentMember: Member; onLog
             setLastEmailSentAt(Date.now()); // Record send time for cooldown
             setShowVerificationInput(true);
             setVerificationSuccess(result.message);
-            setSavedEmail(editPersonalEmail);
             // Keep success message longer if it contains the code (dev mode)
             if (result.code) {
                 // Don't auto-hide in dev mode so user can see the code
@@ -4933,6 +5095,8 @@ const SettingsTab = ({ currentMember, onLogout }: { currentMember: Member; onLog
             setEmailVerified(true);
             setShowVerificationInput(false);
             setVerificationCode('');
+            setIsChangingEmail(false);
+            setSavedEmail(editPersonalEmail);
             setVerificationSuccess(result.message);
             setTimeout(() => setVerificationSuccess(''), 5000);
         } else {
@@ -5038,6 +5202,12 @@ const SettingsTab = ({ currentMember, onLogout }: { currentMember: Member; onLog
             return;
         }
 
+        // If email was changed to a new address, ensure it was verified
+        if (isEmailChanged && !emailVerified) {
+            setProfileError('Please verify your new email address before updating profile');
+            return;
+        }
+
         // Validate phone number - must be exactly 10 digits
         if (!editPhone || !/^\d{10}$/.test(editPhone)) {
             setProfileError('Phone number must be exactly 10 digits');
@@ -5055,8 +5225,29 @@ const SettingsTab = ({ currentMember, onLogout }: { currentMember: Member; onLog
         });
 
         if (result) {
-            setProfileSuccess('Profile updated successfully! Changes will reflect after re-login.');
-            setTimeout(() => setProfileSuccess(''), 3000);
+            setSavedEmail(editPersonalEmail);
+            setIsChangingEmail(false);
+            setEmailVerified(true);
+
+            // Immediately sync updated member to parent state & session storage
+            const updatedMember: Member = {
+                ...currentMember,
+                ...result,
+                icon: getRoleIcon(result.role || currentMember.role)
+            };
+            if (onUpdateMember) {
+                onUpdateMember(updatedMember);
+            }
+            const saved = sessionStorage.getItem('udaanMemberData');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    sessionStorage.setItem('udaanMemberData', JSON.stringify({ ...parsed, ...result }));
+                } catch { }
+            }
+
+            setProfileSuccess('Profile updated successfully!');
+            setTimeout(() => setProfileSuccess(''), 4000);
         } else {
             setProfileError('Failed to update profile. Please try again.');
         }
@@ -5707,12 +5898,12 @@ const SettingsTab = ({ currentMember, onLogout }: { currentMember: Member; onLog
                                                         )}
                                                     </label>
 
-                                                    {/* Show locked email with change button when verified */}
-                                                    {emailVerified && !isChangingEmail ? (
+                                                    {/* Show locked email with change button when verified and not changing */}
+                                                    {emailVerified && !isChangingEmail && !isEmailChanged ? (
                                                         <div className="flex gap-2">
                                                             <input
                                                                 type="email"
-                                                                value={savedEmail}
+                                                                value={savedEmail || editPersonalEmail}
                                                                 readOnly
                                                                 className="flex-1 bg-white/5 border border-green-500/50 rounded-lg px-4 py-3 text-white/70 cursor-not-allowed"
                                                             />
@@ -5720,8 +5911,7 @@ const SettingsTab = ({ currentMember, onLogout }: { currentMember: Member; onLog
                                                                 type="button"
                                                                 onClick={() => {
                                                                     setIsChangingEmail(true);
-                                                                    setEditPersonalEmail('');
-                                                                    setEmailVerified(false);
+                                                                    setEditPersonalEmail(savedEmail || currentMember.personal_email || '');
                                                                     setShowVerificationInput(false);
                                                                     setVerificationCode('');
                                                                     setVerificationError('');
@@ -5742,7 +5932,7 @@ const SettingsTab = ({ currentMember, onLogout }: { currentMember: Member; onLog
                                                                         value={editPersonalEmail}
                                                                         onChange={(e) => setEditPersonalEmail(e.target.value)}
                                                                         placeholder="your.personal@gmail.com"
-                                                                        className={`flex-1 bg-white/5 border rounded-lg px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500/50 ${emailVerified && editPersonalEmail === savedEmail
+                                                                        className={`flex-1 bg-white/5 border rounded-lg px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500/50 ${(!isEmailChanged && (emailVerified || currentMember.email_verified))
                                                                             ? 'border-green-500/50'
                                                                             : 'border-white/10'
                                                                             }`}
@@ -5753,19 +5943,20 @@ const SettingsTab = ({ currentMember, onLogout }: { currentMember: Member; onLog
                                                                             type="button"
                                                                             onClick={() => {
                                                                                 setIsChangingEmail(false);
-                                                                                setEditPersonalEmail(savedEmail);
-                                                                                setEmailVerified(true);
+                                                                                setEditPersonalEmail(savedEmail || currentMember.personal_email || '');
+                                                                                if (currentMember.email_verified) setEmailVerified(true);
                                                                                 setShowVerificationInput(false);
                                                                                 setVerificationCode('');
                                                                                 setVerificationError('');
                                                                             }}
+                                                                            title="Cancel change"
                                                                             className="px-3 py-3 bg-white/5 border border-white/20 rounded-lg text-white/60 hover:bg-white/10 transition-all flex-shrink-0"
                                                                         >
                                                                             <X size={16} />
                                                                         </button>
                                                                     )}
                                                                 </div>
-                                                                {(!emailVerified || editPersonalEmail !== savedEmail) && (
+                                                                {isEmailChanged && !emailVerified && (
                                                                     <button
                                                                         type="button"
                                                                         onClick={handleSendVerificationCode}
@@ -5787,9 +5978,14 @@ const SettingsTab = ({ currentMember, onLogout }: { currentMember: Member; onLog
                                                                 )}
                                                             </div>
 
-                                                            {isChangingEmail && (
+                                                            {isChangingEmail && isEmailChanged && !emailVerified && (
                                                                 <p className="text-orange-400/70 text-xs mt-1">
                                                                     ⚠ Enter new email and verify to update
+                                                                </p>
+                                                            )}
+                                                            {isChangingEmail && !isEmailChanged && (
+                                                                <p className="text-green-400/70 text-xs mt-1">
+                                                                    ✓ Current registered email (already verified)
                                                                 </p>
                                                             )}
                                                         </>
@@ -5852,7 +6048,7 @@ const SettingsTab = ({ currentMember, onLogout }: { currentMember: Member; onLog
                                                         </div>
                                                     )}
 
-                                                    {!emailVerified && editPersonalEmail && !showVerificationInput && (
+                                                    {!emailVerified && editPersonalEmail && !showVerificationInput && (isEmailChanged || !currentMember.email_verified) && (
                                                         <p className="text-yellow-400/70 text-xs mt-1">
                                                             ⚠ Email not verified. Click "Verify" to receive a verification code.
                                                         </p>
@@ -6001,7 +6197,8 @@ const SettingsTab = ({ currentMember, onLogout }: { currentMember: Member; onLog
                                                         !editPersonalEmail ||
                                                         !editPhone ||
                                                         editPhone.length !== 10 ||
-                                                        !emailVerified
+                                                        (isEmailChanged && !emailVerified) ||
+                                                        (!currentMember.email_verified && !emailVerified)
                                                     }
                                                     className="w-full py-3 bg-blue-500 hover:bg-blue-400 disabled:bg-blue-500/50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
                                                 >
@@ -6017,12 +6214,13 @@ const SettingsTab = ({ currentMember, onLogout }: { currentMember: Member; onLog
                                                         </>
                                                     )}
                                                 </button>
-                                                {(!emailVerified || !editRollNo || !editPersonalEmail || editPhone.length !== 10) && (
+                                                {(!editRollNo || !editPersonalEmail || editPhone.length !== 10 || (isEmailChanged && !emailVerified) || (!currentMember.email_verified && !emailVerified)) && (
                                                     <p className="text-yellow-400/70 text-xs text-center mt-2">
                                                         {!editRollNo ? '⚠ Roll number is required' :
                                                             !editPersonalEmail ? '⚠ Personal email is required' :
                                                                 editPhone.length !== 10 ? '⚠ Valid 10-digit phone number is required' :
-                                                                    !emailVerified ? '⚠ Please verify your email first' : ''}
+                                                                    (isEmailChanged && !emailVerified) ? '⚠ Please verify your new email first' :
+                                                                        (!currentMember.email_verified && !emailVerified) ? '⚠ Please verify your email first' : ''}
                                                     </p>
                                                 )}
                                             </form>
@@ -6079,7 +6277,7 @@ const AssignTaskTab = ({ currentMember }: { currentMember: Member }) => {
             setSelectedMembers([]);
 
             const [membersData, tasksData] = await Promise.all([
-                getAssignableMembers(), // Use getAssignableMembers to exclude alumni and super admin
+                getAssignableMembers(), // Exclude mentors, 4th years, and super admin
                 getTasksAssignedBy(currentMember.member_id)
             ]);
 
@@ -6135,6 +6333,9 @@ const AssignTaskTab = ({ currentMember }: { currentMember: Member }) => {
                     message: `${formatName(currentMember.name)} assigned you a ${newTask.category} task: "${newTask.title}"
 Description: ${newTask.description || "No description provided."}`,
                     link: `/team-login?task_id=${newTask.id}`
+                }, {
+                    sendEmail: true,
+                    senderName: formatName(currentMember.name)
                 });
             }
         }
@@ -6308,7 +6509,7 @@ Description: ${newTask.description || "No description provided."}`,
 
                                 {/* Filters */}
                                 <div className="flex flex-wrap gap-2 mb-3">
-                                    {/* Year Filter - Only years 1-3 can be assigned tasks (4th year and alumni excluded) */}
+                                    {/* Year Filter - Only years 1-3 can be assigned tasks (4th years and mentors excluded) */}
                                     <select
                                         value={yearFilter}
                                         onChange={(e) => setYearFilter(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
@@ -6689,18 +6890,15 @@ const AddMemberTab = ({ currentMember }: { currentMember: Member }) => {
     const [successMessage, setSuccessMessage] = useState('');
     const [errorMessage, setErrorMessage] = useState('');
 
-    // Check if current user is UDAAN-000 (super admin)
-    const isSuperAdminUser = currentMember.member_id === 'UDAAN-000';
-
-    // Form fields - role is always 'Member' by default (or 'Alumni' for UDAAN-000)
+    // Form fields
     const [name, setName] = useState('');
     const [rollNo, setRollNo] = useState('');
     const [password, setPassword] = useState('');
     const [selectedDivisions, setSelectedDivisions] = useState<string[]>([]);
     const [year, setYear] = useState<number>(2);
-    const [isAlumni, setIsAlumni] = useState(false); // Only for UDAAN-000
+    const [isMentor, setIsMentor] = useState<boolean>(false);
 
-    // Auto-derived fields from roll number
+    // Auto-derived & editable fields
     const [department, setDepartment] = useState('');
     const [instituteEmail, setInstituteEmail] = useState('');
     const [detectedDeptCode, setDetectedDeptCode] = useState('');
@@ -6730,28 +6928,31 @@ const AddMemberTab = ({ currentMember }: { currentMember: Member }) => {
         'PI': 'Production Engineering'
     };
 
-    // Auto-detect department and generate institute email from roll number
+    // Auto-detect department and generate institute email if roll number is entered
     useEffect(() => {
-        if (rollNo.length >= 5) {
-            const deptCode = rollNo.substring(3, 5).toUpperCase();
+        const cleanRoll = rollNo.trim();
+        if (cleanRoll.length >= 5) {
+            const deptCode = cleanRoll.substring(3, 5).toUpperCase();
             setDetectedDeptCode(deptCode);
             if (DEPARTMENT_CODES[deptCode]) {
                 setDepartment(DEPARTMENT_CODES[deptCode]);
-            } else {
-                setDepartment('');
             }
-            // Generate institute email
-            if (rollNo.length === 9) {
-                setInstituteEmail(`${rollNo.toLowerCase()}@nitrkl.ac.in`);
-            } else {
-                setInstituteEmail('');
+            // Generate institute email if 9 chars
+            if (cleanRoll.length === 9) {
+                setInstituteEmail(`${cleanRoll.toLowerCase()}@nitrkl.ac.in`);
             }
         } else {
-            setDepartment('');
-            setInstituteEmail('');
             setDetectedDeptCode('');
         }
     }, [rollNo]);
+
+    // Generate fallback email when name changes if no roll number email is set
+    useEffect(() => {
+        if (!rollNo.trim() && name.trim()) {
+            const cleanName = name.trim().toLowerCase().replace(/[^a-z0-9]/g, '.');
+            setInstituteEmail(`${cleanName}@udaan.nitrkl.ac.in`);
+        }
+    }, [name, rollNo]);
 
     const divisions = ['Drone', 'RC Plane', 'Rocketry', 'Management', 'Creative', 'Web Dev'];
 
@@ -6769,11 +6970,11 @@ const AddMemberTab = ({ currentMember }: { currentMember: Member }) => {
         setPassword('');
         setSelectedDivisions([]);
         setYear(2);
+        setIsMentor(false);
         setDepartment('');
         setInstituteEmail('');
         setDetectedDeptCode('');
         setErrorMessage('');
-        setIsAlumni(false);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -6783,69 +6984,50 @@ const AddMemberTab = ({ currentMember }: { currentMember: Member }) => {
             return;
         }
 
-        // For Alumni (only UDAAN-000 can add), skip roll number validation
-        if (!isAlumni) {
-            if (rollNo.length !== 9) {
-                setErrorMessage('Roll number must be 9 characters (e.g., 121CS0XXX)');
-                return;
-            }
-            if (!department) {
-                setErrorMessage('Could not detect department from roll number. Please check the roll number.');
-                return;
-            }
+        if (!name.trim()) {
+            setErrorMessage('Please enter the full name');
+            return;
+        }
+
+        if (!instituteEmail.trim()) {
+            setErrorMessage('Please provide an email address');
+            return;
+        }
+
+        // Roll number is optional. If provided, validate length
+        const cleanRoll = rollNo.trim();
+        if (cleanRoll && cleanRoll.length !== 9) {
+            setErrorMessage('Roll number should be 9 characters (e.g., 121CS0XXX) or left blank');
+            return;
         }
 
         setIsSubmitting(true);
         setErrorMessage('');
 
         try {
-            // Join multiple divisions with comma
             const divisionString = selectedDivisions.join(', ');
 
-            // If adding alumni (only UDAAN-000 can do this)
-            if (isAlumni && isSuperAdminUser) {
-                const { addAlumniMember } = await import('../utils/supabase');
-                const result = await addAlumniMember(currentMember.member_id, {
-                    name,
-                    email: instituteEmail || `${name.toLowerCase().replace(/\s+/g, '.')}@alumni.nitrkl.ac.in`,
-                    password,
-                    division: divisionString,
-                    department: department || undefined,
-                    roll_no: rollNo || undefined
-                });
+            const result = await addMemberWithYear({
+                name: name.trim(),
+                email: instituteEmail.trim(),
+                password: password.trim(),
+                role: isMentor ? 'Mentor' : 'Member',
+                division: divisionString,
+                year: isMentor ? 0 : year,
+                added_by: currentMember.member_id,
+                isCouncil: false,
+                roll_no: cleanRoll ? cleanRoll.toUpperCase() : undefined,
+                department: department || 'General',
+                institute_email: instituteEmail.trim()
+            });
 
-                if (result.success && result.member) {
-                    setSuccessMessage(`Successfully added alumni ${name} with ID: ${result.member.member_id}`);
-                    resetForm();
-                    setShowForm(false);
-                    setTimeout(() => setSuccessMessage(''), 5000);
-                } else {
-                    setErrorMessage(result.message || 'Failed to add alumni.');
-                }
+            if (result.success && result.member) {
+                setSuccessMessage(`Successfully added ${isMentor ? 'Mentor' : 'member'} ${name} with ID: ${result.member.member_id}`);
+                resetForm();
+                setShowForm(false);
+                setTimeout(() => setSuccessMessage(''), 5000);
             } else {
-                // Regular member addition
-                const result = await addMemberWithYear({
-                    name,
-                    email: instituteEmail, // Auto-generated institute email
-                    password,
-                    role: 'Member', // All new members are added as 'Member' by default
-                    division: divisionString,
-                    year,
-                    added_by: currentMember.member_id,
-                    isCouncil: false, // New members added here are regular members, not council
-                    roll_no: rollNo.toUpperCase(),
-                    department: department,
-                    institute_email: instituteEmail
-                });
-
-                if (result.success && result.member) {
-                    setSuccessMessage(`Successfully added ${name} with ID: ${result.member.member_id}`);
-                    resetForm();
-                    setShowForm(false);
-                    setTimeout(() => setSuccessMessage(''), 5000);
-                } else {
-                    setErrorMessage(result.error || 'Failed to add member. Please try again.');
-                }
+                setErrorMessage(result.error || 'Failed to add member. Please try again.');
             }
         } catch (error) {
             setErrorMessage('An error occurred. Please try again.');
@@ -6856,7 +7038,7 @@ const AddMemberTab = ({ currentMember }: { currentMember: Member }) => {
     };
 
     const getIdFormatPreview = () => {
-        if (isAlumni) return 'A-XXXX';
+        if (isMentor) return 'UDAAN-MXXX';
         switch (year) {
             case 1: return 'UDAAN-1XXX';
             case 2: return 'UDAAN-2XXX';
@@ -6871,8 +7053,8 @@ const AddMemberTab = ({ currentMember }: { currentMember: Member }) => {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-white">{isAlumni ? 'Add Alumni' : 'Add Member'}</h1>
-                    <p className="text-white/50 text-sm mt-1">{isAlumni ? 'Add alumni to the Udaan records' : 'Add new members to the Udaan team'}</p>
+                    <h1 className="text-2xl font-bold text-white">Add Member</h1>
+                    <p className="text-white/50 text-sm mt-1">Add new members or mentors to the Udaan team</p>
                 </div>
                 <button
                     onClick={() => {
@@ -6927,74 +7109,53 @@ const AddMemberTab = ({ currentMember }: { currentMember: Member }) => {
                     >
                         <form onSubmit={handleSubmit} className="bg-gray-800/50 rounded-xl border border-white/10 p-6 space-y-5">
                             <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                                <UserPlus size={18} className={isAlumni ? 'text-orange-400' : 'text-green-400'} />
-                                {isAlumni ? 'New Alumni Details' : 'New Member Details'}
+                                <UserPlus size={18} className={isMentor ? 'text-amber-400' : 'text-green-400'} />
+                                {isMentor ? 'New Mentor Details' : 'New Member Details'}
                             </h2>
 
-                            {/* UDAAN-000 can toggle between Member and Alumni */}
-                            {isSuperAdminUser && (
-                                <div className="flex gap-2 p-2 bg-black/30 rounded-lg">
+                            {/* Role / Year Selection */}
+                            <div>
+                                <label className="block text-white/60 text-xs font-mono uppercase tracking-wider mb-2">
+                                    Role / Year of Study *
+                                </label>
+                                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                                    {[1, 2, 3, 4].map((y) => (
+                                        <button
+                                            key={y}
+                                            type="button"
+                                            onClick={() => {
+                                                setYear(y);
+                                                setIsMentor(false);
+                                            }}
+                                            className={`py-3 rounded-lg border transition-all font-medium text-sm ${!isMentor && year === y
+                                                ? y === 1 ? 'bg-purple-500/20 border-purple-500/50 text-purple-400'
+                                                    : 'bg-green-500/20 border-green-500/50 text-green-400'
+                                                : 'bg-white/5 border-white/10 text-white/50 hover:border-white/30'
+                                                }`}
+                                        >
+                                            {y === 1 ? '1st Year' : y === 2 ? '2nd Year' : y === 3 ? '3rd Year' : '4th Year'}
+                                        </button>
+                                    ))}
+                                    {/* Mentor Button */}
                                     <button
                                         type="button"
-                                        onClick={() => setIsAlumni(false)}
-                                        className={`flex-1 py-2 rounded-lg transition-all font-medium text-sm ${!isAlumni
-                                            ? 'bg-green-500/20 border border-green-500/50 text-green-400'
-                                            : 'text-white/50 hover:text-white/70'
+                                        onClick={() => {
+                                            setIsMentor(true);
+                                            setYear(0);
+                                        }}
+                                        className={`py-3 rounded-lg border transition-all font-medium text-sm flex items-center justify-center gap-1.5 ${isMentor
+                                            ? 'bg-amber-500/20 border-amber-500/50 text-amber-400'
+                                            : 'bg-white/5 border-white/10 text-white/50 hover:border-white/30'
                                             }`}
                                     >
-                                        Add Member
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsAlumni(true)}
-                                        className={`flex-1 py-2 rounded-lg transition-all font-medium text-sm ${isAlumni
-                                            ? 'bg-orange-500/20 border border-orange-500/50 text-orange-400'
-                                            : 'text-white/50 hover:text-white/70'
-                                            }`}
-                                    >
-                                        Add Alumni
+                                        <Star size={14} className={isMentor ? 'text-amber-400 fill-amber-400' : 'text-white/40'} />
+                                        Mentor
                                     </button>
                                 </div>
-                            )}
-
-                            {/* Year Selection - Only for Members, not Alumni */}
-                            {!isAlumni && (
-                                <div>
-                                    <label className="block text-white/60 text-xs font-mono uppercase tracking-wider mb-2">
-                                        Year of Study *
-                                    </label>
-                                    <div className="grid grid-cols-4 gap-2">
-                                        {[1, 2, 3, 4].map((y) => (
-                                            <button
-                                                key={y}
-                                                type="button"
-                                                onClick={() => setYear(y)}
-                                                className={`py-3 rounded-lg border transition-all font-medium text-sm ${year === y
-                                                    ? y === 1 ? 'bg-purple-500/20 border-purple-500/50 text-purple-400'
-                                                        : 'bg-green-500/20 border-green-500/50 text-green-400'
-                                                    : 'bg-white/5 border-white/10 text-white/50 hover:border-white/30'
-                                                    }`}
-                                            >
-                                                {y === 1 ? '1st Year' : y === 2 ? '2nd Year' : y === 3 ? '3rd Year' : '4th Year'}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <p className="text-white/40 text-xs mt-2">
-                                        ID Format: <span className="text-green-400 font-mono">{getIdFormatPreview()}</span>
-                                    </p>
-                                </div>
-                            )}
-
-                            {/* Alumni ID Format notice */}
-                            {isAlumni && (
-                                <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3">
-                                    <p className="text-orange-400 text-sm flex items-center gap-2">
-                                        <User size={16} />
-                                        Alumni ID Format: <span className="font-mono">{getIdFormatPreview()}</span>
-                                    </p>
-                                    <p className="text-white/50 text-xs mt-1">Alumni IDs are permanent and never reused</p>
-                                </div>
-                            )}
+                                <p className="text-white/40 text-xs mt-2">
+                                    Assigned ID Format: <span className="text-green-400 font-mono">{getIdFormatPreview()}</span>
+                                </p>
+                            </div>
 
                             {/* Name */}
                             <div>
@@ -7005,64 +7166,77 @@ const AddMemberTab = ({ currentMember }: { currentMember: Member }) => {
                                     type="text"
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
-                                    placeholder={isAlumni ? "Enter alumni's full name..." : "Enter member's full name..."}
+                                    placeholder={isMentor ? "Enter mentor's full name..." : "Enter member's full name..."}
                                     className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-green-500/50 transition-all"
                                     required
                                 />
                             </div>
 
-                            {/* Roll Number - Optional for Alumni */}
+                            {/* Roll Number - Non-compulsory */}
                             <div>
-                                <label className="block text-white/60 text-xs font-mono uppercase tracking-wider mb-2">
-                                    Roll Number {!isAlumni && '*'} {isAlumni && <span className="text-white/40 normal-case">(Optional for alumni)</span>}
-                                </label>
+                                <div className="flex items-center justify-between mb-2">
+                                    <label className="block text-white/60 text-xs font-mono uppercase tracking-wider">
+                                        Roll Number <span className="text-white/40 normal-case">(Optional)</span>
+                                    </label>
+                                    <span className="text-xs text-white/40">Leave empty if not applicable</span>
+                                </div>
                                 <input
                                     type="text"
                                     value={rollNo}
                                     onChange={(e) => setRollNo(e.target.value.toUpperCase())}
-                                    placeholder="e.g., 123CS1234"
+                                    placeholder="e.g., 123CS1234 (Optional)"
                                     className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-green-500/50 transition-all font-mono"
-                                    required={!isAlumni}
                                 />
                                 {detectedDeptCode && (
                                     <p className="text-green-400/60 text-xs mt-1">
-                                        Detected: {DEPARTMENT_CODES[detectedDeptCode]} ({detectedDeptCode})
+                                        Detected Department: {DEPARTMENT_CODES[detectedDeptCode] || detectedDeptCode} ({detectedDeptCode})
                                     </p>
                                 )}
                             </div>
 
-                            {/* Department (Auto-detected) */}
+                            {/* Department - Selectable & Auto-detected */}
                             <div>
                                 <label className="block text-white/60 text-xs font-mono uppercase tracking-wider mb-2">
-                                    Department <span className="text-white/40 normal-case">(Auto-detected from Roll No.)</span>
+                                    Department * {detectedDeptCode && <span className="text-green-400 normal-case">(Auto-selected from Roll No.)</span>}
                                 </label>
-                                <input
-                                    type="text"
+                                <select
                                     value={department}
-                                    readOnly
-                                    placeholder={isAlumni && !rollNo ? "Optional - enter roll number to auto-detect" : "Will be detected from roll number..."}
-                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white/60 placeholder:text-white/30 cursor-not-allowed"
-                                />
+                                    onChange={(e) => setDepartment(e.target.value)}
+                                    className="w-full bg-gray-900 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-green-500/50 transition-all"
+                                    required
+                                >
+                                    <option value="" disabled className="text-white/40">Select Department</option>
+                                    {Object.entries(DEPARTMENT_CODES).map(([code, deptName]) => (
+                                        <option key={code} value={deptName}>
+                                            {deptName} ({code})
+                                        </option>
+                                    ))}
+                                    <option value="Administration">Administration</option>
+                                    <option value="General">General</option>
+                                    <option value="Other">Other</option>
+                                </select>
                             </div>
 
-                            {/* Institute Email (Auto-generated) */}
+                            {/* Email / Institute Email */}
                             <div>
                                 <label className="block text-white/60 text-xs font-mono uppercase tracking-wider mb-2">
-                                    {isAlumni ? 'Email' : 'Institute Email'} <span className="text-white/40 normal-case">(Auto-generated)</span>
+                                    Email Address *
                                 </label>
                                 <input
                                     type="email"
                                     value={instituteEmail}
-                                    readOnly
-                                    placeholder={isAlumni ? "Will be generated from name..." : "Will be generated from roll number..."}
-                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white/60 placeholder:text-white/30 cursor-not-allowed"
+                                    onChange={(e) => setInstituteEmail(e.target.value)}
+                                    placeholder="e.g., student@nitrkl.ac.in or member@gmail.com"
+                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-green-500/50 transition-all font-mono"
+                                    required
                                 />
+                                <p className="text-white/40 text-xs mt-1">Used for login and notifications</p>
                             </div>
 
                             {/* Password */}
                             <div>
                                 <label className="block text-white/60 text-xs font-mono uppercase tracking-wider mb-2">
-                                    Password *
+                                    Initial Password *
                                 </label>
                                 <input
                                     type="text"
@@ -7100,7 +7274,6 @@ const AddMemberTab = ({ currentMember }: { currentMember: Member }) => {
                                         Selected: {selectedDivisions.join(', ')}
                                     </p>
                                 )}
-                                <p className="text-white/40 text-xs mt-1">All new members are added with role "Member"</p>
                             </div>
 
                             {/* Submit Button */}
@@ -7112,12 +7285,12 @@ const AddMemberTab = ({ currentMember }: { currentMember: Member }) => {
                                 {isSubmitting ? (
                                     <>
                                         <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                                        Adding Member...
+                                        Adding {isMentor ? 'Mentor' : 'Member'}...
                                     </>
                                 ) : (
                                     <>
                                         <UserPlus size={18} />
-                                        Add Member
+                                        Add {isMentor ? 'Mentor' : 'Member'}
                                     </>
                                 )}
                             </button>
@@ -7135,7 +7308,15 @@ const AddMemberTab = ({ currentMember }: { currentMember: Member }) => {
                 <div className="space-y-3 text-sm">
                     <div className="flex items-center gap-3">
                         <span className="font-mono text-yellow-400 bg-yellow-500/10 px-3 py-1 rounded">UDAAN-XXX</span>
-                        <span className="text-white/60">→ Council Members (existing)</span>
+                        <span className="text-white/60">→ Council Members</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <span className="font-mono text-amber-400 bg-amber-500/10 px-3 py-1 rounded">UDAAN-MXXX</span>
+                        <span className="text-white/60">→ Mentors</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <span className="font-mono text-purple-400 bg-purple-500/10 px-3 py-1 rounded">UDAAN-1XXX</span>
+                        <span className="text-white/60">→ 1st Year Members</span>
                     </div>
                     <div className="flex items-center gap-3">
                         <span className="font-mono text-blue-400 bg-blue-500/10 px-3 py-1 rounded">UDAAN-2XXX</span>
@@ -7146,27 +7327,29 @@ const AddMemberTab = ({ currentMember }: { currentMember: Member }) => {
                         <span className="text-white/60">→ 3rd Year Members</span>
                     </div>
                     <div className="flex items-center gap-3">
-                        <span className="font-mono text-purple-400 bg-purple-500/10 px-3 py-1 rounded">UDAAN-4XXX</span>
+                        <span className="font-mono text-indigo-400 bg-indigo-500/10 px-3 py-1 rounded">UDAAN-4XXX</span>
                         <span className="text-white/60">→ 4th Year Members</span>
                     </div>
                 </div>
                 <p className="text-white/40 text-xs mt-4">
-                    Member IDs are auto-generated based on year of study.
+                    Member IDs are auto-generated based on role and year of study.
                 </p>
             </div>
         </div>
     );
 };
 
-// Announcements Tab - For council to create and manage announcements
+// Announcements & Targeted Notifications Tab
 const AnnouncementsTab = ({
     announcements,
     onAddAnnouncement,
-    onDeleteAnnouncement
+    onDeleteAnnouncement,
+    currentMember
 }: {
     announcements: Announcement[];
-    onAddAnnouncement: (announcement: Announcement) => void;
+    onAddAnnouncement: (announcement: Announcement, sendEmail?: boolean) => void;
     onDeleteAnnouncement: (id: string) => void;
+    currentMember: Member;
 }) => {
     const [showForm, setShowForm] = useState(false);
     const [title, setTitle] = useState('');
@@ -7175,34 +7358,157 @@ const AnnouncementsTab = ({
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [successMessage, setSuccessMessage] = useState('');
+    const [errorMessage, setErrorMessage] = useState('');
     const [expandedId, setExpandedId] = useState<string | null>(null);
+
+    // Target selection state
+    const [targetType, setTargetType] = useState<NotificationTargetType>('all');
+    const [targetDivision, setTargetDivision] = useState<string>('Drone');
+    const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
+    const [singleMemberId, setSingleMemberId] = useState<string>('');
+    const [sendEmail, setSendEmail] = useState<boolean>(true);
+    const [memberSearchQuery, setMemberSearchQuery] = useState<string>('');
+
+    // Member pool for recipient resolution & live previews
+    const [allMembersList, setAllMembersList] = useState<Member[]>([]);
+    const [isLoadingMembers, setIsLoadingMembers] = useState<boolean>(false);
+
+    useEffect(() => {
+        let isMounted = true;
+        setIsLoadingMembers(true);
+        getActiveMembers()
+            .then(members => {
+                if (isMounted) {
+                    setAllMembersList(members);
+                }
+            })
+            .catch(err => console.error('Error fetching members for notification targeting:', err))
+            .finally(() => {
+                if (isMounted) setIsLoadingMembers(false);
+            });
+        return () => { isMounted = false; };
+    }, []);
+
+    const AVAILABLE_DIVISIONS = ['Drone', 'RC Plane', 'Rocketry', 'Management', 'Creative/Web-Dev'];
+
+    // Dynamically calculate matching recipients
+    const matchingRecipients = React.useMemo(() => {
+        if (targetType === 'all') {
+            return allMembersList.filter(m => m.member_id !== currentMember.member_id);
+        }
+        if (targetType === 'division') {
+            return allMembersList.filter(m => m.division === targetDivision && m.member_id !== currentMember.member_id);
+        }
+        if (targetType === 'selected') {
+            return allMembersList.filter(m => selectedMemberIds.includes(m.member_id));
+        }
+        if (targetType === 'single') {
+            return allMembersList.filter(m => m.member_id === singleMemberId);
+        }
+        return [];
+    }, [targetType, targetDivision, selectedMemberIds, singleMemberId, allMembersList, currentMember.member_id]);
+
+    const verifiedEmailCount = matchingRecipients.filter(m => !!(m.personal_email || m.email)).length;
+
+    // Filtered members for search selectors
+    const filteredSearchMembers = React.useMemo(() => {
+        const query = memberSearchQuery.trim().toLowerCase();
+        if (!query) return allMembersList.filter(m => m.member_id !== currentMember.member_id);
+        return allMembersList.filter(m =>
+            m.member_id !== currentMember.member_id &&
+            (m.name.toLowerCase().includes(query) ||
+             m.member_id.toLowerCase().includes(query) ||
+             (m.division && m.division.toLowerCase().includes(query)) ||
+             (m.role && m.role.toLowerCase().includes(query)))
+        );
+    }, [allMembersList, memberSearchQuery, currentMember.member_id]);
+
+    const toggleSelectMember = (id: string) => {
+        setSelectedMemberIds(prev =>
+            prev.includes(id) ? prev.filter(mId => mId !== id) : [...prev, id]
+        );
+    };
 
     const resetForm = () => {
         setTitle('');
         setContent('');
         setType('update');
         setDate(new Date().toISOString().split('T')[0]);
+        setTargetType('all');
+        setSelectedMemberIds([]);
+        setSingleMemberId('');
+        setMemberSearchQuery('');
+        setSendEmail(true);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setErrorMessage('');
+
+        if (targetType === 'selected' && selectedMemberIds.length === 0) {
+            setErrorMessage('Please select at least one member to notify.');
+            return;
+        }
+
+        if (targetType === 'single' && !singleMemberId) {
+            setErrorMessage('Please select a member to notify.');
+            return;
+        }
+
         setIsSubmitting(true);
 
-        const newAnnouncement: Announcement = {
-            id: String(Date.now()),
-            title,
-            content,
-            date,
-            type,
-            createdBy: 'Council'
-        };
+        try {
+            if (targetType === 'all') {
+                // Broadcast to whole club: add to Announcements board + notify all members
+                const newAnnouncement: Announcement = {
+                    id: String(Date.now()),
+                    title,
+                    content,
+                    date,
+                    type,
+                    createdBy: formatName(currentMember.name)
+                };
 
-        onAddAnnouncement(newAnnouncement);
-        resetForm();
-        setShowForm(false);
-        setSuccessMessage('Announcement published successfully!');
-        setTimeout(() => setSuccessMessage(''), 3000);
-        setIsSubmitting(false);
+                onAddAnnouncement(newAnnouncement, sendEmail);
+                setSuccessMessage(
+                    `Broadcasted announcement to all members${sendEmail ? ' and queued registered email alerts' : ''}!`
+                );
+            } else {
+                // Targeted notification dispatch to specific division, selected members, or single person
+                const result = await dispatchTargetedNotification({
+                    targetType,
+                    targetDivision: targetType === 'division' ? targetDivision : undefined,
+                    targetMemberIds: targetType === 'selected' ? selectedMemberIds : undefined,
+                    singleMemberId: targetType === 'single' ? singleMemberId : undefined,
+                    title,
+                    message: content,
+                    type: 'announcement',
+                    category: type,
+                    senderId: currentMember.member_id,
+                    senderName: formatName(currentMember.name),
+                    sendEmail
+                });
+
+                if (result.success) {
+                    setSuccessMessage(
+                        `Successfully dispatched to ${result.recipientCount} member${result.recipientCount === 1 ? '' : 's'}${sendEmail ? ` (${result.emailCount} emails sent)` : ''}!`
+                    );
+                } else {
+                    setErrorMessage(result.error || 'Failed to dispatch notification.');
+                    setIsSubmitting(false);
+                    return;
+                }
+            }
+
+            resetForm();
+            setShowForm(false);
+            setTimeout(() => setSuccessMessage(''), 4500);
+        } catch (err: any) {
+            console.error('Error publishing notification:', err);
+            setErrorMessage(err?.message || 'Error occurred while sending.');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const getTypeColor = (announcementType: string) => {
@@ -7219,35 +7525,59 @@ const AnnouncementsTab = ({
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-white">Announcements</h1>
-                    <p className="text-white/50 text-sm mt-1">Create and manage announcements visible to all members</p>
+                    <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+                        <span>Communications & Alerts</span>
+                        <span className="text-xs font-mono font-normal px-2.5 py-1 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 uppercase tracking-widest">
+                            Flight Deck Dispatcher
+                        </span>
+                    </h1>
+                    <p className="text-white/50 text-sm mt-1">
+                        Publish club announcements and dispatch targeted notifications with registered email alerts
+                    </p>
                 </div>
                 <button
-                    onClick={() => setShowForm(!showForm)}
-                    className={`flex items-center justify-center gap-2 px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors ${showForm ? 'bg-red-500 hover:bg-red-400' : 'bg-blue-500 hover:bg-blue-400'
-                        }`}
+                    onClick={() => {
+                        setShowForm(!showForm);
+                        setErrorMessage('');
+                    }}
+                    className={`flex items-center justify-center gap-2 px-4 py-2.5 text-white rounded-lg text-sm font-medium transition-all shadow-lg ${
+                        showForm
+                            ? 'bg-red-500/80 hover:bg-red-500 border border-red-400/40'
+                            : 'bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 border border-blue-400/40 shadow-blue-500/20'
+                    }`}
                 >
                     {showForm ? <X size={16} /> : <Plus size={16} />}
-                    {showForm ? 'Cancel' : 'New Announcement'}
+                    {showForm ? 'Close Dispatcher' : 'New Notification / Announcement'}
                 </button>
             </div>
 
-            {/* Success Message */}
+            {/* Success / Error Messages */}
             <AnimatePresence>
                 {successMessage && (
                     <motion.div
                         initial={{ opacity: 0, y: -10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
-                        className="bg-green-500/20 border border-green-500/30 rounded-lg px-4 py-3 flex items-center gap-2 text-green-400"
+                        className="bg-emerald-500/20 border border-emerald-500/40 rounded-lg px-4 py-3 flex items-center gap-2.5 text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.15)]"
                     >
-                        <CheckCircle2 size={18} />
-                        {successMessage}
+                        <CheckCircle2 size={18} className="text-emerald-400 shrink-0" />
+                        <span className="text-sm font-medium">{successMessage}</span>
+                    </motion.div>
+                )}
+                {errorMessage && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="bg-red-500/20 border border-red-500/40 rounded-lg px-4 py-3 flex items-center gap-2.5 text-red-300 shadow-[0_0_20px_rgba(239,68,68,0.15)]"
+                    >
+                        <AlertCircle size={18} className="text-red-400 shrink-0" />
+                        <span className="text-sm font-medium">{errorMessage}</span>
                     </motion.div>
                 )}
             </AnimatePresence>
 
-            {/* Add Announcement Form */}
+            {/* Targeted Notification & Announcement Dispatch Form */}
             <AnimatePresence>
                 {showForm && (
                     <motion.div
@@ -7256,38 +7586,274 @@ const AnnouncementsTab = ({
                         exit={{ opacity: 0, height: 0 }}
                         className="overflow-hidden"
                     >
-                        <form onSubmit={handleSubmit} className="bg-gray-800/50 rounded-xl border border-white/10 p-5 space-y-4">
-                            <h3 className="text-white font-medium flex items-center gap-2">
-                                <Bell size={18} className="text-blue-400" />
-                                New Announcement
-                            </h3>
+                        <form onSubmit={handleSubmit} className="bg-gray-900/90 backdrop-blur-md rounded-xl border border-white/15 p-5 sm:p-6 space-y-5 shadow-2xl">
+                            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                                <h3 className="text-white font-medium flex items-center gap-2 text-base">
+                                    <Bell size={18} className="text-blue-400" />
+                                    <span>Compose Dispatch</span>
+                                </h3>
+                                <span className="text-[11px] font-mono text-gray-400 uppercase tracking-wider">
+                                    Targeted Alert System
+                                </span>
+                            </div>
 
+                            {/* STEP 1: TARGET AUDIENCE SELECTOR */}
+                            <div className="space-y-2">
+                                <label className="block text-white/70 text-xs font-mono uppercase tracking-wider">
+                                    1. Target Recipient Audience *
+                                </label>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                                    {[
+                                        { id: 'all', label: 'Whole Club', icon: Users, desc: 'All active members' },
+                                        { id: 'division', label: 'Specific Team', icon: Shield, desc: 'Division/squadron' },
+                                        { id: 'selected', label: 'Certain Members', icon: Check, desc: 'Pick specific people' },
+                                        { id: 'single', label: 'Single Person', icon: User, desc: 'Direct to 1 member' },
+                                    ].map((opt) => {
+                                        const Icon = opt.icon;
+                                        const isSelected = targetType === opt.id;
+                                        return (
+                                            <button
+                                                key={opt.id}
+                                                type="button"
+                                                onClick={() => setTargetType(opt.id as NotificationTargetType)}
+                                                className={`p-3 rounded-lg border text-left transition-all flex flex-col justify-between ${
+                                                    isSelected
+                                                        ? 'bg-blue-600/20 border-blue-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.2)]'
+                                                        : 'bg-white/[0.03] border-white/10 hover:border-white/20 text-gray-300 hover:text-white'
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <Icon size={16} className={isSelected ? 'text-blue-400' : 'text-gray-400'} />
+                                                    <span className="font-semibold text-xs">{opt.label}</span>
+                                                </div>
+                                                <span className="text-[10px] text-gray-500 font-mono">{opt.desc}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* CONDITIONAL TARGET SELECTORS */}
+                            {/* A. Division Selector */}
+                            {targetType === 'division' && (
+                                <div className="p-4 bg-white/[0.02] border border-white/10 rounded-lg space-y-2.5 animate-fade-in">
+                                    <label className="block text-xs font-mono text-gray-300 uppercase tracking-wider">
+                                        Select Division / Team
+                                    </label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {AVAILABLE_DIVISIONS.map(div => (
+                                            <button
+                                                key={div}
+                                                type="button"
+                                                onClick={() => setTargetDivision(div)}
+                                                className={`px-3 py-1.5 rounded text-xs font-medium border transition-all ${
+                                                    targetDivision === div
+                                                        ? 'bg-blue-500 text-white border-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.3)]'
+                                                        : 'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:border-white/20'
+                                                }`}
+                                            >
+                                                {div}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* B. Certain Members Multi-Select */}
+                            {targetType === 'selected' && (
+                                <div className="p-4 bg-white/[0.02] border border-white/10 rounded-lg space-y-3 animate-fade-in">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-xs font-mono text-gray-300 uppercase tracking-wider">
+                                            Select Specific Members ({selectedMemberIds.length} selected)
+                                        </label>
+                                        {selectedMemberIds.length > 0 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedMemberIds([])}
+                                                className="text-[10px] text-red-400 hover:text-red-300 font-mono underline"
+                                            >
+                                                Clear Selection
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Selected chips */}
+                                    {selectedMemberIds.length > 0 && (
+                                        <div className="flex flex-wrap gap-1.5 p-2 bg-black/30 rounded border border-white/10 max-h-28 overflow-y-auto">
+                                            {selectedMemberIds.map(id => {
+                                                const m = allMembersList.find(mem => mem.member_id === id);
+                                                return (
+                                                    <span
+                                                        key={id}
+                                                        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 text-xs font-mono"
+                                                    >
+                                                        <span>{m ? m.name : id} ({id})</span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => toggleSelectMember(id)}
+                                                            className="hover:text-white"
+                                                        >
+                                                            &times;
+                                                        </button>
+                                                    </span>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+
+                                    {/* Search input */}
+                                    <div className="relative">
+                                        <Search size={14} className="absolute left-3 top-3 text-gray-400" />
+                                        <input
+                                            type="text"
+                                            value={memberSearchQuery}
+                                            onChange={(e) => setMemberSearchQuery(e.target.value)}
+                                            placeholder="Search by name, member ID, or division..."
+                                            className="w-full bg-black/40 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-xs text-white placeholder:text-gray-500 focus:outline-none focus:border-blue-500/50"
+                                        />
+                                    </div>
+
+                                    {/* Member selection list */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                                        {filteredSearchMembers.slice(0, 30).map(m => {
+                                            const isSelected = selectedMemberIds.includes(m.member_id);
+                                            return (
+                                                <button
+                                                    key={m.member_id}
+                                                    type="button"
+                                                    onClick={() => toggleSelectMember(m.member_id)}
+                                                    className={`p-2 rounded border text-left flex items-center justify-between text-xs transition-colors ${
+                                                        isSelected
+                                                            ? 'bg-blue-600/30 border-blue-500/60 text-white'
+                                                            : 'bg-white/[0.02] border-white/5 hover:bg-white/[0.05] text-gray-300'
+                                                    }`}
+                                                >
+                                                    <div className="truncate">
+                                                        <div className="font-semibold truncate">{m.name}</div>
+                                                        <div className="text-[10px] text-gray-400 font-mono truncate">
+                                                            {m.member_id} • {m.division || 'General'}
+                                                        </div>
+                                                    </div>
+                                                    <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ml-2 ${
+                                                        isSelected
+                                                            ? 'bg-blue-500 border-blue-400 text-white'
+                                                            : 'border-white/20'
+                                                    }`}>
+                                                        {isSelected && <Check size={10} />}
+                                                    </span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* C. Single Person Selector */}
+                            {targetType === 'single' && (
+                                <div className="p-4 bg-white/[0.02] border border-white/10 rounded-lg space-y-3 animate-fade-in">
+                                    <label className="block text-xs font-mono text-gray-300 uppercase tracking-wider">
+                                        Select Target Recipient Member
+                                    </label>
+                                    <div className="relative">
+                                        <Search size={14} className="absolute left-3 top-3 text-gray-400" />
+                                        <input
+                                            type="text"
+                                            value={memberSearchQuery}
+                                            onChange={(e) => setMemberSearchQuery(e.target.value)}
+                                            placeholder="Search by name or callsign..."
+                                            className="w-full bg-black/40 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-xs text-white placeholder:text-gray-500 focus:outline-none focus:border-blue-500/50"
+                                        />
+                                    </div>
+                                    <div className="max-h-44 overflow-y-auto space-y-1 pr-1">
+                                        {filteredSearchMembers.slice(0, 20).map(m => {
+                                            const isSelected = singleMemberId === m.member_id;
+                                            return (
+                                                <button
+                                                    key={m.member_id}
+                                                    type="button"
+                                                    onClick={() => setSingleMemberId(m.member_id)}
+                                                    className={`w-full p-2.5 rounded border text-left flex items-center justify-between text-xs transition-colors ${
+                                                        isSelected
+                                                            ? 'bg-blue-600/30 border-blue-500 text-white shadow-[0_0_10px_rgba(59,130,246,0.2)]'
+                                                            : 'bg-white/[0.02] border-white/5 hover:bg-white/[0.05] text-gray-300'
+                                                    }`}
+                                                >
+                                                    <div>
+                                                        <div className="font-semibold text-white">{m.name}</div>
+                                                        <div className="text-[10px] text-gray-400 font-mono">
+                                                            {m.member_id} • {m.division || 'General'} • {m.role}
+                                                        </div>
+                                                    </div>
+                                                    <span className="text-[10px] font-mono text-blue-400">
+                                                        {m.personal_email || m.email ? '✉ Email Ready' : 'No Email'}
+                                                    </span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* AUDIENCE PREVIEW BADGE */}
+                            <div className="p-3 bg-blue-950/30 border border-blue-500/20 rounded-lg flex items-center justify-between text-xs">
+                                <div className="flex items-center gap-2 text-blue-300">
+                                    <Target size={15} className="text-blue-400 shrink-0" />
+                                    <span>
+                                        Audience: <strong>{matchingRecipients.length} member{matchingRecipients.length === 1 ? '' : 's'}</strong> will receive this in-app
+                                    </span>
+                                </div>
+                                <span className="text-[11px] font-mono text-gray-400">
+                                    {verifiedEmailCount} registered email{verifiedEmailCount === 1 ? '' : 's'}
+                                </span>
+                            </div>
+
+                            {/* STEP 2: REGISTERED EMAIL TOGGLE */}
+                            <div className="flex items-start gap-3 p-3.5 bg-gradient-to-r from-blue-950/40 to-slate-900/40 border border-blue-500/30 rounded-lg">
+                                <input
+                                    type="checkbox"
+                                    id="sendNotificationEmailCheckbox"
+                                    checked={sendEmail}
+                                    onChange={(e) => setSendEmail(e.target.checked)}
+                                    className="mt-1 w-4 h-4 text-blue-500 rounded bg-black/40 border-white/30 focus:ring-blue-500 cursor-pointer"
+                                />
+                                <label htmlFor="sendNotificationEmailCheckbox" className="text-xs text-gray-200 cursor-pointer select-none">
+                                    <span className="font-semibold text-white flex items-center gap-1.5">
+                                        <Mail size={14} className="text-blue-400" />
+                                        Send Official Email Alert to Registered Addresses
+                                    </span>
+                                    <p className="text-gray-400 mt-0.5 text-[11px] leading-relaxed">
+                                        In addition to their in-app notification bell, recipients will receive a formatted email alert in their inbox with this notice and an instant Flight Deck link.
+                                    </p>
+                                </label>
+                            </div>
+
+                            {/* STEP 3: MESSAGE CONTENT */}
                             {/* Title */}
                             <div>
-                                <label className="block text-white/60 text-xs font-mono uppercase tracking-wider mb-2">
-                                    Title *
+                                <label className="block text-white/70 text-xs font-mono uppercase tracking-wider mb-1.5">
+                                    Notification Title *
                                 </label>
                                 <input
                                     type="text"
                                     value={title}
                                     onChange={(e) => setTitle(e.target.value)}
-                                    placeholder="Announcement title..."
-                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500/50 transition-all"
+                                    placeholder="e.g. Flight Test Briefing / Urgent Division Task / Meeting Schedule..."
+                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500/50 transition-all text-sm"
                                     required
                                 />
                             </div>
 
                             {/* Content */}
                             <div>
-                                <label className="block text-white/60 text-xs font-mono uppercase tracking-wider mb-2">
-                                    Content *
+                                <label className="block text-white/70 text-xs font-mono uppercase tracking-wider mb-1.5">
+                                    Message Content *
                                 </label>
                                 <textarea
                                     value={content}
                                     onChange={(e) => setContent(e.target.value)}
-                                    placeholder="Write your announcement here..."
+                                    placeholder="Write your notice or directive here..."
                                     rows={4}
-                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500/50 transition-all resize-none"
+                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500/50 transition-all resize-none text-sm leading-relaxed"
                                     required
                                 />
                             </div>
@@ -7295,33 +7861,31 @@ const AnnouncementsTab = ({
                             {/* Type and Date */}
                             <div className="grid sm:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-white/60 text-xs font-mono uppercase tracking-wider mb-2">
-                                        Type *
+                                    <label className="block text-white/70 text-xs font-mono uppercase tracking-wider mb-1.5">
+                                        Category Tag *
                                     </label>
                                     <select
                                         value={type}
                                         onChange={(e) => setType(e.target.value as 'meeting' | 'update' | 'deadline' | 'important')}
-                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500/50 transition-all"
+                                        className="w-full bg-gray-800 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500/50 transition-all text-sm"
                                     >
-                                        <option value="update">Update</option>
-                                        <option value="meeting">Meeting</option>
-                                        <option value="deadline">Deadline</option>
-                                        <option value="important">Important</option>
+                                        <option value="update">📢 General Update</option>
+                                        <option value="meeting">📅 Squadron Meeting</option>
+                                        <option value="deadline">⏰ Task Deadline</option>
+                                        <option value="important">🚨 Critical Directive</option>
                                     </select>
                                 </div>
 
                                 <div>
-                                    <label className="block text-white/60 text-xs font-mono uppercase tracking-wider mb-2">
-                                        Date *
+                                    <label className="block text-white/70 text-xs font-mono uppercase tracking-wider mb-1.5">
+                                        Event / Effective Date
                                     </label>
                                     <input
                                         type="date"
                                         value={date}
                                         onChange={(e) => setDate(e.target.value)}
                                         min={new Date().toISOString().split('T')[0]}
-                                        max={new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0]}
-                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500/50 transition-all"
-                                        required
+                                        className="w-full bg-gray-800 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500/50 transition-all text-sm"
                                     />
                                 </div>
                             </div>
@@ -7330,14 +7894,20 @@ const AnnouncementsTab = ({
                             <button
                                 type="submit"
                                 disabled={isSubmitting}
-                                className="w-full bg-blue-500 hover:bg-blue-400 text-white font-medium py-3 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                className="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-medium py-3 rounded-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(59,130,246,0.3)] text-sm tracking-wide"
                             >
                                 {isSubmitting ? (
-                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                        <span>Dispatching to {matchingRecipients.length} Recipient{matchingRecipients.length === 1 ? '' : 's'}...</span>
+                                    </div>
                                 ) : (
                                     <>
-                                        <Bell size={18} />
-                                        Publish Announcement
+                                        <Send size={16} />
+                                        <span>
+                                            Dispatch to {matchingRecipients.length} Member{matchingRecipients.length === 1 ? '' : 's'}
+                                            {sendEmail ? ' (In-App + Email)' : ' (In-App Only)'}
+                                        </span>
                                     </>
                                 )}
                             </button>
@@ -7349,7 +7919,7 @@ const AnnouncementsTab = ({
             {/* Announcements List */}
             <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                    <h2 className="text-white/60 text-sm font-medium">All Announcements ({announcements.length})</h2>
+                    <h2 className="text-white/60 text-sm font-medium">Club Announcement Board ({announcements.length})</h2>
                 </div>
 
                 {announcements.length === 0 ? (
@@ -7884,7 +8454,15 @@ const JoinCorpsApplicationsTab = ({ currentMember }: { currentMember: Member }) 
     );
 };
 
-const MemberDashboard = ({ member, onLogout }: { member: Member; onLogout: () => void }) => {
+const MemberDashboard = ({
+    member,
+    onLogout,
+    onUpdateMember
+}: {
+    member: Member;
+    onLogout: () => void;
+    onUpdateMember?: (updated: Member) => void;
+}) => {
     const isProvisional = member.status === 'provisional';
     const [activeTab, setActiveTab] = useState(isProvisional ? 'whatsapp-group' : 'dashboard');
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -8038,25 +8616,21 @@ const MemberDashboard = ({ member, onLogout }: { member: Member; onLogout: () =>
             try {
                 // Check if super admin and fetch tasks accordingly
                 const superAdmin = isSuperAdmin(member.member_id);
-                const isAlumni = member.role === 'Alumni' || member.year === 0;
 
                 // Fetch tasks based on member role
                 // - Super Admin: sees all tasks
-                // - Alumni: no tasks
                 // - Regular members: their own tasks
                 let fetchedTasks: any[] = [];
-                if (!isAlumni) {
-                    if (superAdmin) {
-                        // Super admin sees ALL tasks
-                        fetchedTasks = await getTasksForMemberByRole(
-                            member.member_id,
-                            member.year,
-                            member.clearance,
-                            member.role
-                        );
-                    } else {
-                        fetchedTasks = await getAllTasksForMember(member.member_id);
-                    }
+                if (superAdmin) {
+                    // Super admin sees ALL tasks
+                    fetchedTasks = await getTasksForMemberByRole(
+                        member.member_id,
+                        member.year,
+                        member.clearance,
+                        member.role
+                    );
+                } else {
+                    fetchedTasks = await getAllTasksForMember(member.member_id);
                 }
 
                 if (fetchedTasks && fetchedTasks.length > 0) {
@@ -8079,7 +8653,6 @@ const MemberDashboard = ({ member, onLogout }: { member: Member; onLogout: () =>
 
                 // Fetch announcements based on member role
                 // - Super Admin: all announcements
-                // - Alumni: only UDAAN-000 announcements
                 // - Regular members: all announcements
                 const fetchedAnnouncements = await getAnnouncementsForMember(member.member_id, member.role);
 
@@ -8109,7 +8682,7 @@ const MemberDashboard = ({ member, onLogout }: { member: Member; onLogout: () =>
         fetchData();
     }, [member.member_id, member.role, member.year, member.clearance]);
 
-    const handleAddAnnouncement = async (announcement: Announcement) => {
+    const handleAddAnnouncement = async (announcement: Announcement, sendEmail: boolean = true) => {
         // Add to Supabase
         const created = await createAnnouncement({
             title: announcement.title,
@@ -8128,22 +8701,10 @@ const MemberDashboard = ({ member, onLogout }: { member: Member; onLogout: () =>
             }, ...prev]);
 
             // Send notification to all members about the new announcement
-            // Alumni only receive notifications for announcements from UDAAN-000
             const allMembers = await getMembers();
-            const superAdmin = isSuperAdmin(member.member_id);
 
-            // Filter recipients based on who is posting
-            const recipients = allMembers.filter(m => {
-                // Skip the member who created the announcement
-                if (m.member_id === member.member_id) return false;
-
-                // Alumni only receive notifications from UDAAN-000 (admin) announcements
-                if (m.role === 'Alumni' || m.year === 0) {
-                    return superAdmin; // Only include alumni if poster is super admin
-                }
-
-                return true; // All other members receive notifications
-            });
+            // Filter recipients based on who is posting (exclude the author)
+            const recipients = allMembers.filter(m => m.member_id !== member.member_id);
 
             if (recipients.length > 0) {
                 // Format the event date nicely
@@ -8190,7 +8751,11 @@ const MemberDashboard = ({ member, onLogout }: { member: Member; onLogout: () =>
                     event_date: announcement.date,
                     announcement_type: announcement.type
                 }));
-                await createBulkNotifications(notifications);
+                await createBulkNotifications(notifications, {
+                    sendEmail,
+                    senderName: formatName(member.name),
+                    category: announcement.type
+                });
             }
 
             // Log activity
@@ -8788,6 +9353,7 @@ const MemberDashboard = ({ member, onLogout }: { member: Member; onLogout: () =>
                     announcements={announcements}
                     onAddAnnouncement={handleAddAnnouncement}
                     onDeleteAnnouncement={handleDeleteAnnouncement}
+                    currentMember={member}
                 />;
             case 'council-transfer':
                 return <CouncilTransferTab currentMember={member} />;
@@ -8802,7 +9368,7 @@ const MemberDashboard = ({ member, onLogout }: { member: Member; onLogout: () =>
             case 'division-requests':
                 return <DivisionRequestsTab currentMember={member} />;
             case 'settings':
-                return <SettingsTab currentMember={member} onLogout={onLogout} />;
+                return <SettingsTab currentMember={member} onLogout={onLogout} onUpdateMember={onUpdateMember} />;
             default:
                 return <DashboardTab member={member} tasks={tasks} announcements={announcements} />;
         }
@@ -8969,9 +9535,8 @@ const MemberDashboard = ({ member, onLogout }: { member: Member; onLogout: () =>
                         const isPresident = member.role.toLowerCase().includes('president') && !member.role.toLowerCase().includes('vice');
                         const is4thYear = member.year === 4;
                         const superAdmin = isSuperAdmin(member.member_id);
-                        const isAlumni = member.role === 'Alumni' || member.year === 0;
                         const isProvisionalMember = member.status === 'provisional';
-                        const canAssignTasks = (isCouncil || is4thYear) && !isAlumni;
+                        const canAssignTasks = isCouncil || is4thYear;
                         const isDivisionHead = Object.values(DIVISION_HEADS).some(h => h.member_id === member.member_id);
 
                         // Build mobile nav items matching desktop sidebar exactly
@@ -8984,14 +9549,6 @@ const MemberDashboard = ({ member, onLogout }: { member: Member; onLogout: () =>
                                 { id: 'task-registration', icon: <ClipboardList size={20} />, label: 'Task 1', badge: 0 },
                                 { id: 'task-online-test', icon: <FileText size={20} />, label: 'Task 2', badge: 0 },
                                 { id: 'task-assigned', icon: <ListTodo size={20} />, label: 'Task 3', badge: 0 },
-                                { id: 'settings', icon: <Settings size={20} />, label: 'Settings', badge: 0 },
-                            ];
-                        } else if (isAlumni && !superAdmin) {
-                            // Alumni - limited access
-                            navItems = [
-                                { id: 'dashboard', icon: <BarChart3 size={20} />, label: 'Home', badge: 0 },
-                                { id: 'notifications', icon: <Bell size={20} />, label: 'Alerts', badge: unreadNotificationCount },
-                                { id: 'id-card', icon: <User size={20} />, label: 'ID Card', badge: 0 },
                                 { id: 'settings', icon: <Settings size={20} />, label: 'Settings', badge: 0 },
                             ];
                         } else if (superAdmin) {
@@ -9078,7 +9635,8 @@ const ForcePasswordChangeScreen: React.FC<{
     onLogout: () => void;
 }> = ({ member, onPasswordUpdated, onLogout }) => {
     const isSuperAdmin = member.member_id === 'UDAAN-000';
-    const [currentPassword, setCurrentPassword] = useState(isSuperAdmin ? 'SuperAdmin@2026' : 'Udaan@2026');
+    const isEB = member.clearance === 5;
+    const [currentPassword, setCurrentPassword] = useState(isSuperAdmin ? 'SuperAdmin@2026' : (isEB ? 'Admin@2026' : 'Udaan@2026'));
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -9168,7 +9726,7 @@ const ForcePasswordChangeScreen: React.FC<{
                             type="password"
                             value={currentPassword}
                             onChange={(e) => setCurrentPassword(e.target.value)}
-                            placeholder={isSuperAdmin ? "Enter current password (e.g. SuperAdmin@2026)" : "Enter current password (e.g. Udaan@2026)"}
+                            placeholder={isSuperAdmin ? "Enter current password (e.g. SuperAdmin@2026)" : (isEB ? "Enter current password (e.g. Admin@2026)" : "Enter current password (e.g. Udaan@2026)")}
                             className="w-full px-4 py-2.5 rounded-lg bg-black/50 border border-white/10 text-white font-mono text-sm focus:border-nation-secondary focus:outline-none focus:ring-1 focus:ring-nation-secondary transition-all"
                             required
                         />
@@ -9220,7 +9778,7 @@ const ForcePasswordChangeScreen: React.FC<{
                     <button
                         type="submit"
                         disabled={isSubmitting}
-                        className="w-full py-3 bg-nation-secondary hover:bg-blue-600 text-white font-display font-bold uppercase tracking-[0.2em] text-xs rounded-lg transition-all shadow-lg hover:shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        className="w-full py-3 bg-nation-secondary hover:bg-blue-600 text-white font-display font-bold uppercase tracking-[0.2em] text-xs rounded-lg transition-all shadow-lg hover:shadow-blue-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                         {isSubmitting ? (
                             <>
@@ -9345,6 +9903,11 @@ const TeamLoginPage: React.FC = () => {
         }
     };
 
+    const handleUpdateMember = (updatedMember: Member) => {
+        setLoggedInMember(updatedMember);
+        sessionStorage.setItem('udaanMemberData', JSON.stringify(updatedMember));
+    };
+
     // Show dashboard if logged in
     if (loggedInMember) {
         // Enforce password change on first login
@@ -9360,7 +9923,7 @@ const TeamLoginPage: React.FC = () => {
                 />
             );
         }
-        return <MemberDashboard member={loggedInMember} onLogout={handleLogout} />;
+        return <MemberDashboard member={loggedInMember} onLogout={handleLogout} onUpdateMember={handleUpdateMember} />;
     }
 
     // SESSION FLASH FIX: Show loading state while checking session

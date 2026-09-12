@@ -19,6 +19,15 @@ const RegisterPage = React.lazy(() => import('./pages/Register'));
 const InductionLoginPage = React.lazy(() => import('./pages/InductionLogin'));
 const TeamLoginPage = React.lazy(() => import('./pages/TeamLogin'));
 
+// --- MOBILE HAPTIC FEEDBACK UTILITY ---
+const triggerHaptic = (pattern: number | number[] = 10) => {
+    if (typeof window !== 'undefined' && typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        try {
+            navigator.vibrate(pattern);
+        } catch { }
+    }
+};
+
 // --- AUDIO SYSTEM ---
 interface AudioContextType {
     musicPlaying: boolean;
@@ -102,20 +111,24 @@ const AudioProvider = ({ children }: { children?: React.ReactNode }) => {
         } catch (err) { }
 
         // Global click handler plays click sound only for buttons and cards
-        // Also works with touch events on mobile
+        // Works reliably with touch events on mobile
         const onDocClick = (e: MouseEvent | TouchEvent) => {
             try {
                 // allow temporary suppression flag
                 if ((window as any).__suppressClickAudio) return;
 
-                // Only play for interactive elements (buttons, cards, links, inputs)
-                const target = (e as TouchEvent).touches
-                    ? (e as TouchEvent).touches[0]?.target as HTMLElement
-                    : (e as MouseEvent).target as HTMLElement;
+                // Safely resolve target across MouseEvent and TouchEvent (including touchend changedTouches)
+                const touch = (e as TouchEvent).changedTouches?.[0] || (e as TouchEvent).touches?.[0];
+                const target = touch
+                    ? (touch.target as HTMLElement)
+                    : ((e as MouseEvent).target as HTMLElement);
                 if (!target) return;
 
                 const isInteractive = target.closest('button, a, [role="button"], .hover-glow, .magnetic, input, textarea, [data-cursor-hover], .group');
                 if (!isInteractive) return;
+
+                // Micro haptic feedback on interactive click/tap
+                triggerHaptic(10);
 
                 const a = clickAudioRef.current;
                 if (a) {
@@ -183,11 +196,11 @@ const CustomCursor: React.FC = memo(() => {
     const cursorDotRef = useRef<HTMLDivElement>(null);
     const [isHovering, setIsHovering] = useState(false);
     const [isClicking, setIsClicking] = useState(false);
-    const [isTouch, setIsTouch] = useState(false);
+    const [isTouch, setIsTouch] = useState(() => typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0 || window.innerWidth < 1024));
 
     useEffect(() => {
         // Detect touch device and disable custom cursor
-        const touchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        const touchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0 || window.innerWidth < 1024;
         setIsTouch(touchDevice);
 
         // Don't set up cursor events on touch devices
@@ -260,11 +273,11 @@ const CustomCursor: React.FC = memo(() => {
         };
     }, []);
 
-    // Don't render custom cursor on touch devices
+    // Don't render custom cursor on touch/mobile devices
     if (isTouch) return null;
 
     return (
-        <>
+        <div className="hidden lg:block">
             {/* Outer ring - follows with delay */}
             <div
                 ref={cursorRef}
@@ -284,24 +297,97 @@ const CustomCursor: React.FC = memo(() => {
                     : 'w-2 h-2 bg-white'
                     }`}
             />
-        </>
+        </div>
     );
 });
 
-// --- SPOTLIGHT EFFECT COMPONENT ---
+// --- SCI-FI TOUCH RIPPLE EFFECT (Mobile Touch Visuals) ---
+interface TouchRipple {
+    id: number;
+    x: number;
+    y: number;
+}
+
+const TouchRippleEffect: React.FC = memo(() => {
+    const [ripples, setRipples] = useState<TouchRipple[]>([]);
+    const [isTouch, setIsTouch] = useState(false);
+
+    useEffect(() => {
+        const touchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        setIsTouch(touchDevice);
+        if (!touchDevice) return;
+
+        let nextId = 0;
+        const handleTouch = (e: TouchEvent) => {
+            if (e.touches.length === 0) return;
+            const t = e.touches[0];
+            const newRipple = { id: nextId++, x: t.clientX, y: t.clientY };
+            setRipples((prev) => [...prev.slice(-3), newRipple]);
+            setTimeout(() => {
+                setRipples((prev) => prev.filter((r) => r.id !== newRipple.id));
+            }, 600);
+        };
+
+        window.addEventListener('touchstart', handleTouch, { passive: true });
+        return () => window.removeEventListener('touchstart', handleTouch);
+    }, []);
+
+    if (!isTouch || ripples.length === 0) return null;
+
+    return (
+        <div className="fixed inset-0 pointer-events-none z-[9998] overflow-hidden">
+            {ripples.map((ripple) => (
+                <span
+                    key={ripple.id}
+                    className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-nation-secondary/50 animate-ping pointer-events-none"
+                    style={{
+                        left: `${ripple.x}px`,
+                        top: `${ripple.y}px`,
+                        width: '28px',
+                        height: '28px',
+                        boxShadow: '0 0 10px rgba(0, 240, 255, 0.4)',
+                    }}
+                />
+            ))}
+        </div>
+    );
+});
+
+// --- SPOTLIGHT EFFECT COMPONENT (with mobile touch tracking) ---
 const SpotlightCard: React.FC<{ children: React.ReactNode; className?: string }> = memo(({ children, className = '' }) => {
     const divRef = useRef<HTMLDivElement>(null);
     const [position, setPosition] = useState({ x: 0, y: 0 });
     const [opacity, setOpacity] = useState(0);
 
-    const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const updatePosition = (clientX: number, clientY: number) => {
         if (!divRef.current) return;
         const rect = divRef.current.getBoundingClientRect();
-        setPosition({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+        setPosition({ x: clientX - rect.left, y: clientY - rect.top });
+    };
+
+    const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+        updatePosition(e.clientX, e.clientY);
     };
 
     const handleMouseEnter = () => setOpacity(1);
     const handleMouseLeave = () => setOpacity(0);
+
+    const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+        if (e.touches.length > 0) {
+            updatePosition(e.touches[0].clientX, e.touches[0].clientY);
+            setOpacity(1);
+        }
+    };
+
+    const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+        if (e.touches.length > 0) {
+            updatePosition(e.touches[0].clientX, e.touches[0].clientY);
+        }
+    };
+
+    const handleTouchEnd = () => {
+        setTimeout(() => setOpacity(0), 1000);
+    };
 
     return (
         <div
@@ -309,6 +395,9 @@ const SpotlightCard: React.FC<{ children: React.ReactNode; className?: string }>
             onMouseMove={handleMouseMove}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
             className={`relative overflow-hidden ${className}`}
         >
             {/* Spotlight gradient */}
@@ -316,7 +405,7 @@ const SpotlightCard: React.FC<{ children: React.ReactNode; className?: string }>
                 className="pointer-events-none absolute -inset-px opacity-0 transition-opacity duration-300"
                 style={{
                     opacity,
-                    background: `radial-gradient(600px circle at ${position.x}px ${position.y}px, rgba(59, 130, 246, 0.15), transparent 40%)`,
+                    background: `radial-gradient(450px circle at ${position.x}px ${position.y}px, rgba(0, 240, 255, 0.18), transparent 45%)`,
                 }}
             />
             {children}
@@ -326,20 +415,19 @@ const SpotlightCard: React.FC<{ children: React.ReactNode; className?: string }>
 
 // --- UTILITY COMPONENTS ---
 
-// Magnetic effect component - disabled on touch devices for better mobile UX
+// Magnetic effect component - with tactile touch spring physics and haptics on mobile
 const Magnetic: React.FC<{ children?: React.ReactNode }> = memo(({ children }) => {
     const ref = useRef<HTMLDivElement>(null);
     const [position, setPosition] = useState({ x: 0, y: 0 });
     const [isTouch, setIsTouch] = useState(false);
 
     useEffect(() => {
-        // Detect touch device and disable magnetic effect
+        // Detect touch device
         const touchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
         setIsTouch(touchDevice);
     }, []);
 
     const handleMouse = (e: React.MouseEvent) => {
-        // Skip magnetic effect on touch devices
         if (isTouch || !ref.current) return;
 
         const { clientX, clientY } = e;
@@ -351,9 +439,22 @@ const Magnetic: React.FC<{ children?: React.ReactNode }> = memo(({ children }) =
 
     const reset = () => setPosition({ x: 0, y: 0 });
 
-    // On touch devices, render children without magnetic wrapper animation
+    const handleTouchStart = () => {
+        triggerHaptic(8);
+    };
+
+    // On touch devices, provide responsive tactile micro-press spring animation
     if (isTouch) {
-        return <div className="magnetic">{children}</div>;
+        return (
+            <motion.div 
+                className="magnetic inline-block"
+                onTouchStart={handleTouchStart}
+                whileTap={{ scale: 0.94 }}
+                transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            >
+                {children}
+            </motion.div>
+        );
     }
 
     return (
@@ -375,7 +476,7 @@ const GlitchText = ({ text, className = "", trigger = "view" }: { text: string, 
     const [hasPlayed, setHasPlayed] = useState(false);
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     const ref = useRef(null);
-    const isInView = useInView(ref, { once: true, amount: 0.5 });
+    const isInView = useInView(ref, { once: true, amount: 0.1 });
 
     const glitch = useCallback(() => {
         let iteration = 0;
@@ -1155,21 +1256,26 @@ const EventDetailsModal = ({ event, onClose }: { event: EventDetails | null, onC
     return (
         <AnimatePresence>
             <motion.div
-                className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+                className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={onClose}
             >
                 <motion.div
-                    className="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col border border-white/10 shadow-2xl"
-                    initial={{ scale: 0.9, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0.9, opacity: 0 }}
+                    className="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-t-2xl sm:rounded-2xl max-w-2xl w-full max-h-[88vh] sm:max-h-[85vh] flex flex-col border border-white/10 shadow-2xl overflow-hidden"
+                    initial={{ scale: 0.95, y: 50, opacity: 0 }}
+                    animate={{ scale: 1, y: 0, opacity: 1 }}
+                    exit={{ scale: 0.95, y: 50, opacity: 0 }}
                     onClick={(e) => e.stopPropagation()}
                 >
+                    {/* Mobile Sheet Drag Indicator Bar */}
+                    <div className="sm:hidden flex justify-center pt-2.5 pb-1 bg-gradient-to-r from-nation-secondary/20 to-transparent flex-shrink-0">
+                        <div className="w-10 h-1 rounded-full bg-white/30"></div>
+                    </div>
+
                     {/* Header - Fixed */}
-                    <div className="p-6 border-b border-white/10 bg-gradient-to-r from-nation-secondary/20 to-transparent rounded-t-2xl flex-shrink-0">
+                    <div className="p-4 sm:p-6 border-b border-white/10 bg-gradient-to-r from-nation-secondary/20 to-transparent rounded-t-2xl flex-shrink-0">
                         <div className="flex justify-between items-start">
                             <div>
                                 <div className="flex items-center gap-2 mb-2">
@@ -1177,12 +1283,15 @@ const EventDetailsModal = ({ event, onClose }: { event: EventDetails | null, onC
                                         <CheckCircle size={12} /> Team Access
                                     </span>
                                 </div>
-                                <h2 className="text-3xl font-display text-white uppercase tracking-wider font-bold">{event.title}</h2>
-                                <p className="text-nation-text font-mono text-sm uppercase tracking-widest mt-1">{event.subtitle}</p>
+                                <h2 className="text-2xl sm:text-3xl font-display text-white uppercase tracking-wider font-bold">{event.title}</h2>
+                                <p className="text-nation-text font-mono text-xs sm:text-sm uppercase tracking-widest mt-1">{event.subtitle}</p>
                             </div>
                             <button
-                                onClick={onClose}
-                                className="text-white/60 hover:text-white transition-colors p-2"
+                                onClick={() => {
+                                    triggerHaptic(8);
+                                    onClose();
+                                }}
+                                className="text-white/60 hover:text-white transition-colors p-2 active:scale-95"
                             >
                                 <X size={24} />
                             </button>
@@ -1314,9 +1423,9 @@ const MainContent = () => {
     const [showInductionClosed, setShowInductionClosed] = useState(false);
     const [showRegistrationClosed, setShowRegistrationClosed] = useState(false);
     const [showAlreadyMember, setShowAlreadyMember] = useState(false);
-    const [induction1stYearOpen, setInduction1stYearOpen] = useState(false); // Default to false, will be updated from config
-    const [induction2ndYearOpen, setInduction2ndYearOpen] = useState(false); // Default to false, will be updated from config
-    const [registrationOpen, setRegistrationOpen] = useState(false); // Default to false, will be updated from config
+    const [induction1stYearOpen, setInduction1stYearOpen] = useState(true); // Default to true so induction buttons render
+    const [induction2ndYearOpen, setInduction2ndYearOpen] = useState(true); // Default to true
+    const [registrationOpen, setRegistrationOpen] = useState(false);
     const [isTeamMember, setIsTeamMember] = useState(false); // Track if user is logged in as team member
     const [selectedEvent, setSelectedEvent] = useState<EventDetails | null>(null); // For event details modal
     const [registrationCounts, setRegistrationCounts] = useState<{ [key: string]: number }>({}); // Dynamic registration counts from Supabase
@@ -1351,10 +1460,28 @@ const MainContent = () => {
         return () => window.removeEventListener('storage', checkTeamLogin);
     }, []);
 
+    // Lock body scroll when mobile menu is open
+    useEffect(() => {
+        if (menuOpen) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = '';
+        }
+        return () => {
+            document.body.style.overflow = '';
+        };
+    }, [menuOpen]);
+
     // navigate to team login while marking that user navigated away
     const goToTeamLogin = () => {
         try { sessionStorage.setItem('navigatedAway', 'true'); } catch (err) { }
         navigate('/team-login');
+    };
+
+    // navigate to induction login
+    const goToInductionLogin = () => {
+        try { sessionStorage.setItem('navigatedAway', 'true'); } catch (err) { }
+        navigate('/induction-login');
     };
 
     // Open event details modal with dynamic count
@@ -1383,9 +1510,8 @@ const MainContent = () => {
                 setRegistrationOpen(data?.registrationOpen ?? false);
             })
             .catch(error => {
-                console.error('Error fetching config:', error);
-                setInduction1stYearOpen(false); // Default to closed on error
-                setInduction2ndYearOpen(false);
+                setInduction1stYearOpen(true);
+                setInduction2ndYearOpen(true);
                 setRegistrationOpen(false);
             });
     }, []);
@@ -1538,6 +1664,8 @@ const MainContent = () => {
 
     return (
         <>
+            <CustomCursor />
+            <TouchRippleEffect />
             <AnimatePresence>
                 {!introDismissed && <TypewriterIntro onStartScroll={handleIntroDismiss} />}
             </AnimatePresence>
@@ -1810,63 +1938,178 @@ const MainContent = () => {
                             </button>
                         </div>
 
-                        <button className="md:hidden text-white pt-2 hover:text-nation-secondary transition-colors" onClick={() => setMenuOpen(!menuOpen)}>
-                            {menuOpen ? <X /> : <Menu />}
+                        <button
+                            aria-label={menuOpen ? "Close menu" : "Open menu"}
+                            className="md:hidden text-white p-2 hover:text-nation-secondary transition-colors"
+                            onClick={() => setMenuOpen(!menuOpen)}
+                        >
+                            {menuOpen ? <X size={22} /> : <Menu size={22} />}
                         </button>
                     </div>
-
-                    {/* Mobile menu - Full parity with desktop nav
-                        Includes all nav items + music toggle + member portal */}
-                    {menuOpen && (
-                        <div className="md:hidden absolute top-full left-0 w-full bg-black/95 border-b border-nation-secondary/20 backdrop-blur-xl p-6 flex flex-col gap-4 animate-fade-in z-50 shadow-2xl">
-                            {[
-                                { label: 'About', id: 'mission' },
-                                { label: 'Divisions', id: 'fleet' },
-                                { label: 'Data', id: 'telemetry' },
-                                { label: 'Events', id: 'events' },
-                                { label: 'Council', id: 'squadron' }
-                            ].map((item) => (
-                                <button
-                                    key={item.id}
-                                    onClick={() => scrollToSection(item.id)}
-                                    className="text-base font-display text-white hover:text-nation-secondary uppercase tracking-widest text-left py-2"
-                                >
-                                    {item.label}
-                                </button>
-                            ))}
-
-                            {/* Divider */}
-                            <div className="border-t border-white/10 my-2"></div>
-
-                            {/* Music toggle - mobile parity with desktop */}
-                            <button
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    toggleMusic();
-                                }}
-                                className={`flex items-center gap-3 py-2 text-left ${musicPlaying ? 'text-nation-secondary' : 'text-white hover:text-nation-secondary'}`}
-                            >
-                                {musicPlaying ? <Music2 size={18} /> : <Music size={18} />}
-                                <span className="text-sm font-display uppercase tracking-widest">
-                                    {musicPlaying ? 'Pause Music' : 'Play Music'}
-                                </span>
-                            </button>
-
-                            {/* Member Portal - mobile parity with desktop */}
-                            <button
-                                onClick={() => {
-                                    setMenuOpen(false);
-                                    goToTeamLogin();
-                                }}
-                                className="flex items-center gap-3 py-2 text-white hover:text-nation-secondary text-left"
-                            >
-                                <User size={18} />
-                                <span className="text-sm font-display uppercase tracking-widest">Member Portal</span>
-                            </button>
-                        </div>
-                    )}
                 </nav>
+
+                {/* Full-screen Mobile Tactical Menu Drawer - Zero bleed-through, 100% opaque aerospace HUD */}
+                <AnimatePresence>
+                    {menuOpen && (
+                        <motion.div
+                            initial={{ opacity: 0, y: -16 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -16 }}
+                            transition={{ duration: 0.2, ease: "easeOut" }}
+                            className="md:hidden fixed inset-0 z-[999] bg-[#07080C] text-white flex flex-col justify-between overflow-y-auto"
+                            style={{ height: '100dvh', minHeight: '-webkit-fill-available' }}
+                        >
+                            {/* Background tactical accent glows */}
+                            <div className="absolute top-0 right-0 w-72 h-72 bg-blue-600/10 blur-[100px] pointer-events-none" />
+                            <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-500/5 blur-[90px] pointer-events-none" />
+
+                            {/* Top Bar */}
+                            <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 bg-[#07080C] sticky top-0 z-20">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-9 h-9 flex items-center justify-center">
+                                        <img src="/udaan-logo.webp" alt="Udaan" className="w-full h-full object-contain drop-shadow-[0_0_10px_rgba(59,130,246,0.8)]" />
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="font-display font-bold text-sm tracking-widest text-white">UDAAN</span>
+                                        <span className="text-[8px] font-mono text-nation-secondary tracking-widest uppercase">TACTICAL INTERFACE // NITR</span>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setMenuOpen(false)}
+                                    className="w-9 h-9 border border-white/20 bg-white/5 hover:border-nation-secondary hover:bg-nation-secondary/10 flex items-center justify-center rounded text-white hover:text-nation-secondary transition-all"
+                                    aria-label="Close menu"
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
+
+                            {/* Navigation Directives */}
+                            <div className="px-5 py-4 flex flex-col gap-2 relative z-10 flex-1 justify-center">
+                                <div className="text-[9px] font-mono text-gray-500 uppercase tracking-[0.25em] mb-1 px-2">
+                                    NAVIGATION DIRECTIVES
+                                </div>
+                                {[
+                                    { number: '01', label: 'ABOUT', id: 'mission', subtitle: 'Mission, legacy & engineering philosophy' },
+                                    { number: '02', label: 'DIVISIONS', id: 'fleet', subtitle: 'Aero, Multirotor, RC & Autonomous fleets' },
+                                    { number: '03', label: 'DATA', id: 'telemetry', subtitle: 'Telemetry, performance stats & milestones' },
+                                    { number: '04', label: 'EVENTS', id: 'events', subtitle: 'Workshops, hackathons & airshows' },
+                                    { number: '05', label: 'COUNCIL', id: 'squadron', subtitle: 'Executive board & squadron commanders' },
+                                ].map((item) => {
+                                    const isActive = activeSection === item.id;
+                                    return (
+                                        <button
+                                            key={item.id}
+                                            onClick={() => {
+                                                setMenuOpen(false);
+                                                scrollToSection(item.id);
+                                            }}
+                                            className={`group w-full px-3.5 py-2.5 rounded-lg border transition-all text-left flex items-center justify-between ${
+                                                isActive
+                                                    ? 'bg-blue-950/40 border-nation-secondary/60 shadow-[0_0_15px_rgba(59,130,246,0.15)]'
+                                                    : 'bg-white/[0.02] border-white/5 hover:bg-white/[0.05] hover:border-white/20'
+                                            }`}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-[11px] font-mono font-bold text-nation-secondary tracking-wider">
+                                                    {item.number}
+                                                </span>
+                                                <div className="flex flex-col">
+                                                    <span className={`font-display text-xs uppercase tracking-[0.16em] transition-colors ${
+                                                        isActive ? 'text-white font-bold' : 'text-gray-200 group-hover:text-white'
+                                                    }`}>
+                                                        {item.label}
+                                                    </span>
+                                                    <span className="text-[9px] font-mono text-gray-500 group-hover:text-gray-400 truncate max-w-[210px]">
+                                                        {item.subtitle}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <ArrowRight
+                                                size={13}
+                                                className={`transition-transform duration-200 group-hover:translate-x-1 ${
+                                                    isActive ? 'text-nation-secondary' : 'text-gray-600 group-hover:text-gray-300'
+                                                }`}
+                                            />
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Action Hub & Controls */}
+                            <div className="px-5 py-4 border-t border-white/10 bg-[#07080C] flex flex-col gap-2.5 relative z-10">
+                                {/* Audio toggle */}
+                                <button
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        toggleMusic();
+                                    }}
+                                    className="w-full py-2.5 px-3.5 bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-white/20 rounded-md flex items-center justify-between text-xs transition-colors"
+                                >
+                                    <div className="flex items-center gap-2.5">
+                                        {musicPlaying ? (
+                                            <Music2 size={15} className="text-nation-secondary animate-pulse" />
+                                        ) : (
+                                            <Music size={15} className="text-gray-400" />
+                                        )}
+                                        <span className="font-display text-[10px] tracking-wider uppercase text-gray-200">
+                                            BACKGROUND AUDIO
+                                        </span>
+                                    </div>
+                                    <span className={`text-[9px] font-mono px-2 py-0.5 rounded border ${
+                                        musicPlaying
+                                            ? 'border-nation-secondary/50 text-nation-secondary bg-blue-500/10'
+                                            : 'border-white/10 text-gray-400 bg-white/5'
+                                    }`}>
+                                        {musicPlaying ? 'PLAYING' : 'MUTED'}
+                                    </span>
+                                </button>
+
+                                {/* Member Portal Button */}
+                                <button
+                                    onClick={() => {
+                                        setMenuOpen(false);
+                                        goToTeamLogin();
+                                    }}
+                                    className="w-full py-2.5 px-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-display text-[11px] tracking-[0.2em] uppercase font-bold rounded-md flex items-center justify-between shadow-[0_0_20px_rgba(59,130,246,0.3)] transition-all"
+                                >
+                                    <div className="flex items-center gap-2.5">
+                                        <User size={15} />
+                                        <span>MEMBER PORTAL</span>
+                                    </div>
+                                    <ArrowRight size={13} />
+                                </button>
+
+                                {/* Induction Login Button */}
+                                <button
+                                    onClick={() => {
+                                        setMenuOpen(false);
+                                        goToInductionLogin();
+                                    }}
+                                    className="w-full py-2 px-4 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/25 rounded-md flex items-center justify-between text-[10px] font-display uppercase tracking-widest text-gray-300 transition-colors"
+                                >
+                                    <div className="flex items-center gap-2.5">
+                                        <Shield size={13} className="text-gray-400" />
+                                        <span>INDUCTION LOGIN</span>
+                                    </div>
+                                    <span className="text-[9px] font-mono text-nation-secondary">PORTAL →</span>
+                                </button>
+
+                                {/* Telemetry Footer */}
+                                <div className="pt-1 flex items-center justify-between text-[9px] font-mono text-gray-500 tracking-wider">
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                                        <span className="text-emerald-400">FLIGHT DECK ONLINE</span>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <MapPin size={9} />
+                                        <span>22.2513° N, 84.9049° E</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
                 {/* HERO SECTION */}
                 <section className="relative h-screen flex items-center justify-center overflow-hidden">
@@ -1876,14 +2119,13 @@ const MainContent = () => {
 
                     <motion.div
                         style={{ y: heroY, opacity: heroOpacity }}
-                        className="container mx-auto px-6 relative z-10 text-center -mt-36"
+                        className="container mx-auto px-4 sm:px-6 relative z-10 text-center mt-6 sm:-mt-16 md:-mt-36"
                     >
                         <motion.div
                             initial={{ opacity: 0, y: 20 }}
-                            whileInView={{ opacity: 1, y: 0 }}
-                            viewport={{ once: false, amount: 0.5 }}
+                            animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.6 }}
-                            className="inline-flex items-center gap-2 mb-6 sm:mb-8 px-3 sm:px-4 py-1 sm:py-1.5 border border-white/10 bg-black/40 rounded-full backdrop-blur-sm w-auto max-w-full justify-center"
+                            className="inline-flex items-center gap-2 mb-4 sm:mb-8 px-3 sm:px-4 py-1 sm:py-1.5 border border-white/10 bg-black/40 rounded-full backdrop-blur-sm w-auto max-w-full justify-center"
                         >
                             <span className="w-1.5 h-1.5 bg-nation-secondary rounded-full animate-pulse flex-shrink-0"></span>
                             <span className="text-[8px] sm:text-[9px] font-mono text-nation-secondary uppercase tracking-widest font-semibold truncate">Technical Society • SAC</span>
@@ -1891,23 +2133,21 @@ const MainContent = () => {
 
                         <motion.div
                             initial={{ opacity: 0, scale: 0.9 }}
-                            whileInView={{ opacity: 1, scale: 1 }}
-                            viewport={{ once: false, amount: 0.5 }}
+                            animate={{ opacity: 1, scale: 1 }}
                             transition={{ duration: 0.8, delay: 0.1 }}
-                            className="relative mb-4 sm:mb-6 group cursor-default w-full flex justify-center px-4"
+                            className="relative mb-3 sm:mb-6 group cursor-default w-full flex justify-center px-4"
                         >
-                            <h1 className="font-display text-5xl sm:text-7xl md:text-8xl lg:text-[10rem] text-transparent bg-clip-text bg-gradient-to-b from-white via-white to-white/50 font-black tracking-tighter uppercase relative z-10 hover:scale-[1.01] transition-transform duration-700 select-none whitespace-nowrap drop-shadow-2xl">
-                                <GlitchText text="UDAAN" trigger="view" />
+                            <h1 className="font-display text-4xl sm:text-7xl md:text-8xl lg:text-[10rem] text-white font-black tracking-tighter uppercase relative z-10 hover:scale-[1.01] transition-transform duration-700 select-none whitespace-nowrap drop-shadow-[0_10px_30px_rgba(255,255,255,0.25)]">
+                                <GlitchText text="UDAAN" trigger="always" className="text-white" />
                             </h1>
                             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-16 sm:h-24 md:h-32 bg-nation-secondary/10 blur-[80px] -z-10 opacity-50 group-hover:opacity-80 transition-opacity duration-700"></div>
                         </motion.div>
 
                         <motion.p
                             initial={{ opacity: 0, y: 20 }}
-                            whileInView={{ opacity: 1, y: 0 }}
-                            viewport={{ once: false, amount: 0.5 }}
+                            animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.6, delay: 0.2 }}
-                            className="text-nation-text font-mono text-[10px] sm:text-xs md:text-sm lg:text-lg uppercase tracking-[0.15em] sm:tracking-[0.2em] max-w-5xl mx-auto mb-8 sm:mb-12 leading-relaxed px-4"
+                            className="text-nation-text font-mono text-[10px] sm:text-xs md:text-sm lg:text-lg uppercase tracking-[0.15em] sm:tracking-[0.2em] max-w-5xl mx-auto mb-6 sm:mb-12 leading-relaxed px-4"
                         >
                             The Official Aeromodelling and Robotics Club of NIT Rourkela <br />
                             <span className="text-nation-secondary font-bold mt-2 sm:mt-3 block md:inline md:mt-0 text-glow text-xs sm:text-sm md:text-xl">Design. Build. Fly.</span>
@@ -1915,8 +2155,7 @@ const MainContent = () => {
 
                         <motion.div
                             initial={{ opacity: 0, y: 30 }}
-                            whileInView={{ opacity: 1, y: 0 }}
-                            viewport={{ once: false, amount: 0.5 }}
+                            animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.6, delay: 0.3 }}
                             className="flex flex-col sm:flex-row gap-3 sm:gap-6 justify-center items-center px-4 sm:px-6"
                         >
@@ -1942,24 +2181,26 @@ const MainContent = () => {
                                     const isDeadlinePassed = now > deadline;
 
                                     return (
-                                        <div className="flex flex-col items-center gap-3">
-                                            <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
+                                        <div className="flex flex-col items-center gap-3 sm:gap-4">
+                                            <div className="flex flex-row items-center justify-center gap-3 sm:gap-6 flex-wrap">
                                                 {isDeadlinePassed ? (
                                                     <Magnetic>
                                                         <button
                                                             disabled
-                                                            className="px-5 sm:px-8 py-2.5 sm:py-4 bg-gray-500 text-white/50 font-display font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] text-[9px] sm:text-xs cursor-not-allowed clip-path-slant"
+                                                            className="min-w-[130px] sm:min-w-[190px] px-4 sm:px-8 py-2.5 sm:py-4 bg-[#5d6778] text-white/70 font-display font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] text-[9px] sm:text-xs cursor-not-allowed clip-path-slant flex flex-col items-center justify-center leading-tight shadow-md"
                                                         >
-                                                            Induction Apply
+                                                            <span>Induction</span>
+                                                            <span>Apply</span>
                                                         </button>
                                                     </Magnetic>
                                                 ) : (
                                                     <Magnetic>
                                                         <button
                                                             onClick={handleJoinCorps}
-                                                            className="px-5 sm:px-8 py-2.5 sm:py-4 bg-nation-secondary text-white font-display font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] text-[9px] sm:text-xs hover:bg-white hover:text-black transition-all duration-300 clip-path-slant shadow-lg"
+                                                            className="min-w-[130px] sm:min-w-[190px] px-4 sm:px-8 py-2.5 sm:py-4 bg-nation-secondary text-white font-display font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] text-[9px] sm:text-xs hover:bg-white hover:text-black transition-all duration-300 clip-path-slant shadow-lg flex flex-col items-center justify-center leading-tight"
                                                         >
-                                                            Induction Apply
+                                                            <span>Induction</span>
+                                                            <span>Apply</span>
                                                         </button>
                                                     </Magnetic>
                                                 )}
@@ -1967,18 +2208,21 @@ const MainContent = () => {
                                                 <Magnetic>
                                                     <button
                                                         onClick={() => { try { sessionStorage.setItem('navigatedAway', 'true'); } catch { }; navigate('/induction-login'); }}
-                                                        className="px-5 sm:px-8 py-2.5 sm:py-4 bg-transparent border border-white/20 text-white font-display font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] text-[9px] sm:text-xs hover:border-nation-secondary hover:text-nation-secondary transition-all duration-300 clip-path-slant"
+                                                        className="min-w-[130px] sm:min-w-[190px] px-4 sm:px-8 py-2.5 sm:py-4 bg-transparent border border-white/20 text-white font-display font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] text-[9px] sm:text-xs hover:border-nation-secondary hover:text-nation-secondary transition-all duration-300 relative backdrop-blur-sm flex flex-col items-center justify-center leading-tight"
                                                     >
-                                                        Induction Login
+                                                        <span>Induction</span>
+                                                        <span>Login</span>
+                                                        <HudCorner position="tl" />
+                                                        <HudCorner position="br" />
                                                     </button>
                                                 </Magnetic>
                                             </div>
                                             {isDeadlinePassed ? (
-                                                <p className="text-base font-mono text-red-400 uppercase tracking-widest">
+                                                <p className="text-[10px] sm:text-xs md:text-sm font-mono text-red-400 uppercase tracking-widest text-center mt-1">
                                                     We are not accepting applications anymore
                                                 </p>
                                             ) : (
-                                                <p className="text-base font-mono text-nation-secondary uppercase tracking-widest animate-pulse">
+                                                <p className="text-[10px] sm:text-xs md:text-sm font-mono text-nation-secondary uppercase tracking-widest animate-pulse text-center mt-1">
                                                     The Induction registration date is extended to 9th Feb
                                                 </p>
                                             )}
@@ -2362,45 +2606,45 @@ const MainContent = () => {
                             <HudCorner position="bl" />
                             <HudCorner position="br" />
 
-                            {/* Image wrapper with subtle hover zoom */}
-                            <div className="relative overflow-hidden">
-                                <img
-                                    src="/team-photo.jpg"
-                                    alt="Team Udaan - Aerial Robotics Club, NIT Rourkela"
-                                    className="w-full h-auto max-h-[650px] object-cover object-center transition-transform duration-700 ease-out group-hover:scale-[1.01]"
-                                    loading="lazy"
-                                />
+                            {/* Image wrapper with pristine full-resolution rendering */}
+                            <div className="relative overflow-hidden bg-black/40">
+                                <picture>
+                                    <source srcSet="/team-photo.webp" type="image/webp" />
+                                    <img
+                                        src="/team-photo.jpg"
+                                        alt="Team Udaan - Aerial Robotics Club, NIT Rourkela"
+                                        className="w-full h-auto block object-contain transition-transform duration-700 ease-out group-hover:scale-[1.005]"
+                                        loading="eager"
+                                        decoding="async"
+                                    />
+                                </picture>
+                            </div>
 
-                                {/* Subtle gradient vignettes for seamless dark-theme integration */}
-                                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-nation-void/90 via-transparent to-black/30" />
-                                <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10 rounded-xl" />
-
-                                {/* Overlay Caption Bar */}
-                                <div className="absolute bottom-0 inset-x-0 p-4 sm:p-6 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
-                                    <div>
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                                            <span className="text-[10px] font-mono uppercase tracking-widest text-emerald-400">Team Roster • Active</span>
-                                        </div>
-                                        <h4 className="text-white font-display text-sm sm:text-base md:text-lg uppercase tracking-wider font-bold">
-                                            Aeromodelling and Robotics Club
-                                        </h4>
-                                        <p className="text-white/60 font-mono text-[10px] sm:text-xs tracking-wider">
-                                            National Institute of Technology, Rourkela
-                                        </p>
+                            {/* Caption Bar Below Image - clean, unobstructed view of all members */}
+                            <div className="p-4 sm:p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-nation-void/90 border-t border-white/10">
+                                <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                        <span className="text-[10px] font-mono uppercase tracking-widest text-emerald-400">Team Roster • Active</span>
                                     </div>
+                                    <h4 className="text-white font-display text-sm sm:text-base md:text-lg uppercase tracking-wider font-bold">
+                                        Aeromodelling and Robotics Club
+                                    </h4>
+                                    <p className="text-white/60 font-mono text-[10px] sm:text-xs tracking-wider">
+                                        National Institute of Technology, Rourkela
+                                    </p>
+                                </div>
 
-                                    {/* Division Pills */}
-                                    <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                                        {['Drone', 'RC Plane', 'Rocketry', 'Creative', 'Web Dev', 'Management'].map((div) => (
-                                            <span
-                                                key={div}
-                                                className="px-2.5 py-1 text-[9px] sm:text-[10px] font-mono uppercase tracking-wider bg-white/10 hover:bg-white/20 text-white/90 rounded-md border border-white/10 backdrop-blur-md transition-colors"
-                                            >
-                                                {div}
-                                            </span>
-                                        ))}
-                                    </div>
+                                {/* Division Pills & HD Original Button */}
+                                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                                    {['Drone', 'RC Plane', 'Rocketry', 'Creative', 'Web Dev', 'Management'].map((div) => (
+                                        <span
+                                            key={div}
+                                            className="px-2.5 py-1 text-[9px] sm:text-[10px] font-mono uppercase tracking-wider bg-white/10 hover:bg-white/20 text-white/90 rounded-md border border-white/10 backdrop-blur-md transition-colors"
+                                        >
+                                            {div}
+                                        </span>
+                                    ))}
                                 </div>
                             </div>
                         </div>

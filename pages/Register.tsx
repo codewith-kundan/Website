@@ -509,7 +509,7 @@ const RegisterPage = () => {
                             <button
                                 type="submit"
                                 disabled={isSubmitting || !formData.event || !formData.teamName}
-                                className="group px-8 sm:px-12 py-4 sm:py-5 bg-nation-secondary text-white font-display font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] text-xs sm:text-sm hover:bg-white hover:text-black transition-all duration-300 clip-path-slant shadow-[0_0_30px_rgba(59,130,246,0.4)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 sm:gap-3"
+                                className="group px-8 sm:px-12 py-4 sm:py-5 bg-nation-secondary text-white font-display font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] text-xs sm:text-sm hover:bg-white hover:text-black transition-all duration-300 clip-path-slant shadow-[0_0_30px_rgba(59,130,246,0.4)] disabled:opacity-50 flex items-center gap-2 sm:gap-3"
                             >
                                 {isSubmitting ? (
                                     <>

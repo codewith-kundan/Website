@@ -13,6 +13,7 @@ enum EmailType {
   INDUCTION_CREDENTIALS = 'INDUCTION_CREDENTIALS',
   ID_CHANGE = 'ID_CHANGE',
   INDUCTION_SUCCESS = 'INDUCTION_SUCCESS',
+  NOTIFICATION_ALERT = 'NOTIFICATION_ALERT',
 }
 
 interface EmailPayload {
@@ -24,6 +25,11 @@ interface EmailPayload {
   oldId?: string;
   newId?: string;
   timestamp?: string;
+  title?: string;
+  message?: string;
+  category?: string;
+  senderName?: string;
+  actionUrl?: string;
 }
 
 /**
@@ -144,4 +150,85 @@ export async function sendInductionSuccessEmail(
     name,
     memberId
   });
+}
+
+/**
+ * Helper to ensure actionUrl is always an absolute URL pointing to udaannitr.in
+ */
+function normalizeActionUrl(url?: string): string {
+  const defaultUrl = 'https://udaannitr.in/team-login';
+  if (!url) return defaultUrl;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return `https://udaannitr.in${url.startsWith('/') ? '' : '/'}${url}`;
+}
+
+/**
+ * Dispatches a flight deck notification alert to a single member's registered email
+ */
+export async function sendNotificationEmail(
+  email: string,
+  name: string,
+  title: string,
+  message: string,
+  category: string = 'Notification',
+  senderName: string = 'Flight Command',
+  actionUrl: string = 'https://udaannitr.in/team-login'
+): Promise<boolean> {
+  const normalizedUrl = normalizeActionUrl(actionUrl);
+
+  return sendEmail(EmailType.NOTIFICATION_ALERT, email, {
+    name,
+    title,
+    message,
+    category,
+    senderName,
+    actionUrl: normalizedUrl
+  });
+}
+
+/**
+ * Dispatches notification alert emails to multiple members with rate-limiting protection.
+ * Runs in parallel batches of 5 to avoid overloading the Google Apps Script endpoint.
+ */
+export async function sendBulkNotificationEmails(
+  recipients: Array<{ email: string; name: string }>,
+  title: string,
+  message: string,
+  category: string = 'Notification',
+  senderName: string = 'Flight Command',
+  actionUrl: string = 'https://udaannitr.in/team-login'
+): Promise<{ total: number; sent: number }> {
+  let sentCount = 0;
+  const batchSize = 5;
+  const normalizedUrl = normalizeActionUrl(actionUrl);
+
+  for (let i = 0; i < recipients.length; i += batchSize) {
+    const batch = recipients.slice(i, i + batchSize);
+    const results = await Promise.allSettled(
+      batch.map(r =>
+        sendNotificationEmail(
+          r.email,
+          r.name,
+          title,
+          message,
+          category,
+          senderName,
+          normalizedUrl
+        )
+      )
+    );
+
+    results.forEach(res => {
+      if (res.status === 'fulfilled' && res.value) {
+        sentCount++;
+      }
+    });
+
+    // Brief delay between batches to respect rate limits
+    if (i + batchSize < recipients.length) {
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+  }
+
+  return { total: recipients.length, sent: sentCount };
 }

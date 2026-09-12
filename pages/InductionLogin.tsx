@@ -72,7 +72,7 @@ const InductionLoginPage = () => {
                     <input
                         value={memberId}
                         onChange={e => setMemberId(e.target.value)}
-                        placeholder="Member ID (e.g. UDAAN-1001)"
+                        placeholder="Member ID or Name"
                         className="w-full px-3 py-2 rounded bg-black/40 text-white"
                     />
                     <input

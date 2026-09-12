@@ -176,9 +176,7 @@ img {
 
 /* Hide custom cursor on touch devices */
 @media (pointer: coarse) {
-
-  .custom-cursor,
-  [class*="cursor-"] {
+  .custom-cursor {
     display: none !important;
   }
 }

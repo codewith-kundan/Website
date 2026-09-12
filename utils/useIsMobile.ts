@@ -90,30 +90,26 @@ export function useIsLowEnd(): boolean {
     const nav = navigator as any;
     
     // Check device memory (if available)
-    const lowMemory = nav.deviceMemory !== undefined && nav.deviceMemory < 4;
+    const lowMemory = nav.deviceMemory !== undefined && nav.deviceMemory < 2;
     
     // Check hardware concurrency (CPU cores)
-    const lowCores = nav.hardwareConcurrency !== undefined && nav.hardwareConcurrency < 4;
-    
-    // Check if mobile with high pixel ratio (stresses GPU)
-    const mobileHighDPR = window.innerWidth < 768 && window.devicePixelRatio > 2;
+    const lowCores = nav.hardwareConcurrency !== undefined && nav.hardwareConcurrency < 2;
     
     // Check connection type if available
     const connection = nav.connection || nav.mozConnection || nav.webkitConnection;
     const slowConnection = connection && (connection.effectiveType === '2g' || connection.effectiveType === 'slow-2g');
     
-    return lowMemory || lowCores || mobileHighDPR || slowConnection;
+    return lowMemory || lowCores || slowConnection;
   });
 
   useEffect(() => {
     const nav = navigator as any;
-    const lowMemory = nav.deviceMemory !== undefined && nav.deviceMemory < 4;
-    const lowCores = nav.hardwareConcurrency !== undefined && nav.hardwareConcurrency < 4;
-    const mobileHighDPR = window.innerWidth < 768 && window.devicePixelRatio > 2;
+    const lowMemory = nav.deviceMemory !== undefined && nav.deviceMemory < 2;
+    const lowCores = nav.hardwareConcurrency !== undefined && nav.hardwareConcurrency < 2;
     const connection = nav.connection || nav.mozConnection || nav.webkitConnection;
     const slowConnection = connection && (connection.effectiveType === '2g' || connection.effectiveType === 'slow-2g');
     
-    setIsLowEnd(lowMemory || lowCores || mobileHighDPR || slowConnection);
+    setIsLowEnd(lowMemory || lowCores || slowConnection);
   }, []);
 
   return isLowEnd;
